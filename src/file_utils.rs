@@ -17,7 +17,7 @@ pub fn process_file(file_path: &str) -> Result<FileData, std::io::Error> {
     })
 }
 
-fn get_file_mime_type(file_path: &str) -> String {
+pub fn get_file_mime_type(file_path: &str) -> String {
     let file_extension = Path::new(file_path)
         .extension()
         .and_then(|ext| ext.to_str());
