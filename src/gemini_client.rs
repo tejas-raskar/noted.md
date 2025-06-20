@@ -1,6 +1,8 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
+use crate::file_utils::FileData;
+
 // Request structs
 
 #[derive(Serialize)]
@@ -67,7 +69,7 @@ impl GeminiClient {
 
     pub async fn send_request(
         &self,
-        encoded_image: String,
+        file_data: FileData,
     ) -> Result<GeminiResponse, reqwest::Error> {
         let url = format!(
             "https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key={}",
@@ -86,8 +88,8 @@ impl GeminiClient {
                     Part {
                         text: None,
                         inline_data: Some(InlineData {
-                            mime_type: "image/jpeg".to_string(),
-                            data: encoded_image,
+                            mime_type: file_data.mime_type,
+                            data: file_data.encoded_data,
                         }),
                     },
                 ],

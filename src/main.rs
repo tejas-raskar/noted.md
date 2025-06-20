@@ -11,13 +11,13 @@ use gemini_client::GeminiClient;
 async fn main() {
     let args = Cli::parse();
 
-    let encoded_data = match file_utils::process_image(&args.file_path) {
-        Ok(encoded_image) => {
-            println!("Image processed successfully.");
-            encoded_image
+    let encoded_data = match file_utils::process_file(&args.file_path) {
+        Ok(data) => {
+            println!("File processed successfully.");
+            data
         }
         Err(e) => {
-            eprintln!("Error processing image: {}", e);
+            eprintln!("Error processing file: {}", e);
             std::process::exit(1);
         }
     };
@@ -53,8 +53,10 @@ async fn main() {
             eprintln!("Error parsing the response");
             std::process::exit(1);
         });
-    let x: &[_] = &['`', 'm', 'a', 'r', 'k', 'd', 'o', 'w', 'n'];
-    let cleaned_markdown = markdown_text.trim_start_matches(x).trim_end_matches(x);
+
+    let cleaned_markdown = markdown_text
+        .trim_start_matches("```markdown\n")
+        .trim_end_matches("```");
 
     let output_path = args
         .output
