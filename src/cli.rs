@@ -1,14 +1,30 @@
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Cli {
-    #[arg(required = true)]
-    pub file_path: String,
+    #[command(subcommand)]
+    pub command: Commands,
+}
 
-    #[arg(short, long)]
-    pub output: Option<String>,
+#[derive(Subcommand, Debug)]
+pub enum Commands {
+    Convert {
+        #[arg(required = true)]
+        path: String,
 
-    #[arg(long, env = "GEMINI_API_KEY")]
-    pub api_key: Option<String>,
+        #[arg(short, long)]
+        output: Option<String>,
+
+        #[arg(long, env = "GEMINI_API_KEY")]
+        api_key: Option<String>,
+    },
+
+    Config {
+        #[arg(long)]
+        set_api_key: Option<String>,
+
+        #[arg(long)]
+        show_path: bool,
+    },
 }

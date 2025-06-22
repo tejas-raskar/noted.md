@@ -72,11 +72,11 @@ impl GeminiClient {
         file_data: FileData,
     ) -> Result<GeminiResponse, reqwest::Error> {
         let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key={}",
+            "https://generativelanguage.googleapis.com/v1beta/models/gemma-3-12b-it:generateContent?key={}",
             self.api_key
         );
 
-        let prompt = "Take the handwritten notes from this image and convert them into a clean, well-structured Markdown file. Pay attention to headings, lists, and any other formatting. Resemble the hierarchy. Use latex for mathematical equations. Do not skip anything from the original text. The output should be suitable for use in Obsidian. Just give me the markdown, do not include other text in the response apart from the markdown file. No explanation on how the changes where made is needed".to_string();
+        let prompt = "Take the handwritten notes from this image and convert them into a clean, well-structured Markdown file. Pay attention to headings, lists, and any other formatting. Resemble the hierarchy. Use latex for mathematical equations. For latex use the $$ syntax instead of ```latex. Do not skip anything from the original text. The output should be suitable for use in Obsidian. Just give me the markdown, do not include other text in the response apart from the markdown file. No explanation on how the changes where made is needed".to_string();
 
         let request_body = GeminiRequest {
             contents: vec![Content {
