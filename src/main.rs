@@ -127,7 +127,6 @@ async fn process_and_save_file(
 #[tokio::main]
 async fn main() {
     let args = Cli::parse();
-    ascii_art();
     match args.command {
         Commands::Config {
             set_api_key,
@@ -136,9 +135,9 @@ async fn main() {
             if show_path {
                 if let Some(config_path) = config::get_config_path() {
                     if config_path.exists() {
-                        println!(">>> {:?}", config_path);
+                        println!("Config saved in {:?}", config_path);
                     } else {
-                        eprintln!(">>> No config path found.");
+                        eprintln!("No config path found.");
                         return;
                     }
                 }
@@ -149,9 +148,9 @@ async fn main() {
                 config.gemini = Some(config::GeminiConfig { api_key: key });
 
                 if let Err(e) = config.save() {
-                    println!(">>> Error while saving config: {}", e)
+                    println!("Error while saving config: {}", e)
                 } else {
-                    println!(">>> Config saved successfully.");
+                    println!("Config saved successfully.");
                 }
             }
         }

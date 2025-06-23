@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  build-and-upload:
+    name: Build and upload
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        include:
+          - build: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+
+          - build: macos
+            os: macos-latest
+            target: x86_64-apple-darwin
+
+          - build: windows-gnu
+            os: windows-latest
+            target: x86_64-pc-windows-gnu
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build binary
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Package the binary
+        shell: bash
+        run: |
+          BINARY_NAME="notedmd"
+          RELEASE_VERSION="${{ github.ref_name }}"
+
+          ROOT_DIR="${BINARY_NAME}-${RELEASE_VERSION}-${{ matrix.target }}"
+          mkdir -p "${ROOT_DIR}/bin"
+
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            SOURCE_FILE="target/${{ matrix.target }}/release/${BINARY_NAME}.exe"
+            cp "$SOURCE_FILE" "${ROOT_DIR}/bin/"
+          else
+            SOURCE_FILE="target/${{ matrix.target }}/release/${BINARY_NAME}"
+            cp "$SOURCE_FILE" "${ROOT_DIR}/bin/"
+          fi
+
+          cp LICENSE README.md "${ROOT_DIR}/"
+
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            ASSET_NAME="${ROOT_DIR}.zip"
+            7z a "$ASSET_NAME" "$ROOT_DIR"
+            echo "ASSET=${ASSET_NAME}" >> $GITHUB_ENV
+          else
+            ASSET_NAME="${ROOT_DIR}.tar.gz"
+            tar -czf "$ASSET_NAME" "$ROOT_DIR"
+            echo "ASSET=${ASSET_NAME}" >> $GITHUB_ENV
+          fi
+
+      - name: Upload
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "${{ env.ASSET }}"
