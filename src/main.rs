@@ -11,45 +11,74 @@ use config::Config;
 use config::GeminiConfig;
 use dialoguer::{Password, theme::ColorfulTheme};
 use gemini_client::GeminiClient;
+use indicatif::ProgressBar;
+use indicatif::ProgressStyle;
 use std::path::Path;
 use ui::ascii_art;
 
-async fn process_and_save_file(file_path: &str, client: &GeminiClient, output_dir: Option<&str>) {
+async fn process_and_save_file(
+    file_path: &str,
+    client: &GeminiClient,
+    output_dir: Option<&str>,
+    progress_bar: &ProgressBar,
+) {
     let path = Path::new(file_path);
     let file_name = match path.file_name() {
         Some(name) => name,
         None => {
-            eprintln!("Could not determine filename for {}. Skipping.", file_path);
+            progress_bar.println(format!(
+                "{} {}",
+                "✖".red(),
+                format!(
+                    "Could not determine filename for '{}'. Skipping.",
+                    file_path
+                )
+                .red()
+            ));
             return;
         }
     };
 
-    println!("Processing file: {:#?}", file_name);
+    progress_bar.println(format!(
+        "\n{}",
+        format!("Processing file: {:#?}", file_name).bold()
+    ));
+
     let file_data = match file_utils::process_file(file_path) {
-        Ok(data) => {
-            println!("{:#?} processed successfully.", file_name);
-            data
-        }
+        Ok(data) => data,
         Err(e) => {
-            eprintln!(
-                "Failed to process {:#?}. Skipping file. Error: {}",
-                file_name, e
-            );
+            progress_bar.println(format!(
+                "{} {}",
+                "✖".red(),
+                format!("Failed to read file. Error: {}", e).red()
+            ));
             return;
         }
     };
+    progress_bar.println(format!(
+        "{} {}",
+        "✔".green(),
+        "File read successfully.".green()
+    ));
 
-    println!(">>> Sending request to Gemini");
+    progress_bar.set_message(format!("{}", "Sending to Gemini...".yellow()));
+
     let response = match client.send_request(file_data).await {
-        Ok(res) => {
-            println!(">>> Successfully received response from Gemini");
-            res
-        }
+        Ok(res) => res,
         Err(e) => {
-            eprintln!("Error calling Gemini: {}", e);
+            progress_bar.println(format!(
+                "{} {}",
+                "✖".red(),
+                format!("Error calling Gemini: {}", e).red()
+            ));
             return;
         }
     };
+    progress_bar.println(format!(
+        "{} {}",
+        "✔".green(),
+        "Received response from Gemini".green()
+    ));
 
     let response_text = response
         .candidates
@@ -58,10 +87,10 @@ async fn process_and_save_file(file_path: &str, client: &GeminiClient, output_di
     let markdown_text = if let Some(part) = response_text {
         &part.text
     } else {
-        eprintln!(
-            ">>> Could not find text in Gemini response for {:?}. Skipping.",
+        progress_bar.println(format!(
+            "Could not find text in Gemini response for {:?}. Skipping.",
             file_name
-        );
+        ));
         return;
     };
 
@@ -82,17 +111,23 @@ async fn process_and_save_file(file_path: &str, client: &GeminiClient, output_di
     };
 
     match std::fs::write(&output_path, cleaned_markdown) {
-        Ok(_) => println!(">>> Successfully saved markdown to {}", output_path),
-        Err(e) => {
-            eprintln!(">>> Error saving the markdown file: {}", e);
-        }
+        Ok(_) => progress_bar.println(format!(
+            "{} {}",
+            "✔".green(),
+            format!("Markdown saved to '{}'", output_path.cyan()).green()
+        )),
+        Err(e) => progress_bar.println(format!(
+            "{} {}",
+            "✖".red(),
+            format!("Failed to save file. Error: {}", e).red()
+        )),
     }
 }
 
 #[tokio::main]
 async fn main() {
     let args = Cli::parse();
-
+    ascii_art();
     match args.command {
         Commands::Config {
             set_api_key,
@@ -160,17 +195,54 @@ async fn main() {
             let client = GeminiClient::new(final_api_key);
             let input_path = Path::new(&path);
             if input_path.is_dir() {
-                for entry in std::fs::read_dir(input_path).unwrap() {
-                    let entry = entry.unwrap();
-                    let path = entry.path();
-                    let mime_type = file_utils::get_file_mime_type(path.to_str().unwrap());
-                    if path.is_file() && mime_type != "application/octet-stream" {
-                        process_and_save_file(path.to_str().unwrap(), &client, output.as_deref())
-                            .await;
-                    }
+                let files_to_convert: Vec<_> = std::fs::read_dir(input_path)
+                    .unwrap()
+                    .filter_map(|entry| {
+                        let entry = entry.ok()?;
+                        let path = entry.path();
+                        let mime_type = file_utils::get_file_mime_type(path.to_str()?);
+                        if path.is_file() && mime_type != "application/octet-stream" {
+                            Some(path)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                let progress_bar = ProgressBar::new(files_to_convert.len() as u64);
+                progress_bar.set_style(
+                    ProgressStyle::default_bar()
+                        .template("{bar:40.cyan/blue} {pos}/{len} {msg}")
+                        .unwrap(),
+                );
+
+                progress_bar.set_message("Processing files...");
+
+                for file_path_buf in files_to_convert {
+                    process_and_save_file(
+                        file_path_buf.to_str().unwrap(),
+                        &client,
+                        output.as_deref(),
+                        &progress_bar,
+                    )
+                    .await;
+                    progress_bar.inc(1);
                 }
+
+                progress_bar
+                    .finish_with_message(format!("{}", "Completed processing all files".green()));
             } else {
-                process_and_save_file(&path, &client, output.as_deref()).await;
+                let progress_bar = ProgressBar::new(1);
+                progress_bar.set_style(
+                    ProgressStyle::default_bar()
+                        .template("{bar:40.cyan/blue} {pos}/{len} {msg}")
+                        .unwrap(),
+                );
+                progress_bar.set_message("Processing file...");
+                process_and_save_file(&path, &client, output.as_deref(), &progress_bar).await;
+                progress_bar.inc(1);
+                progress_bar
+                    .finish_with_message(format!("{}", "Completed processing file".green()));
             }
         }
     }
