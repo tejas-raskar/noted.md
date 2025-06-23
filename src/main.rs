@@ -2,12 +2,17 @@ mod cli;
 mod config;
 mod file_utils;
 mod gemini_client;
+mod ui;
 
 use clap::Parser;
 use cli::{Cli, Commands};
+use colored::*;
 use config::Config;
+use config::GeminiConfig;
+use dialoguer::{Password, theme::ColorfulTheme};
 use gemini_client::GeminiClient;
 use std::path::Path;
+use ui::ascii_art;
 
 async fn process_and_save_file(file_path: &str, client: &GeminiClient, output_dir: Option<&str>) {
     let path = Path::new(file_path);
@@ -48,8 +53,8 @@ async fn process_and_save_file(file_path: &str, client: &GeminiClient, output_di
 
     let response_text = response
         .candidates
-        .get(0)
-        .and_then(|candidate| candidate.content.parts.get(0));
+        .first()
+        .and_then(|candidate| candidate.content.parts.first());
     let markdown_text = if let Some(part) = response_text {
         &part.text
     } else {
@@ -80,7 +85,6 @@ async fn process_and_save_file(file_path: &str, client: &GeminiClient, output_di
         Ok(_) => println!(">>> Successfully saved markdown to {}", output_path),
         Err(e) => {
             eprintln!(">>> Error saving the markdown file: {}", e);
-            return;
         }
     }
 }
@@ -124,15 +128,32 @@ async fn main() {
             let final_api_key = if let Some(key) = api_key {
                 key
             } else {
-                let config = Config::load();
+                let mut config = Config::load();
                 if let Some(gemini_config) = config.gemini {
                     gemini_config.api_key
                 } else {
-                    eprintln!(">>> Error: API key not provided.");
-                    eprintln!(
-                        "Please set it with `notedmd config --set-api-key <YOUR_KEY>` or use the --api-key flag."
-                    );
-                    std::process::exit(1);
+                    ascii_art();
+                    let api_key = match Password::with_theme(&ColorfulTheme::default())
+                        .with_prompt("Enter your Gemini API key: ")
+                        .interact()
+                    {
+                        Ok(key) => {
+                            config.gemini = Some(GeminiConfig {
+                                api_key: key.clone(),
+                            });
+                            let _save = match config.save() {
+                                Ok(()) => println!("{}", "Config saved successfully.".green()),
+                                Err(e) => eprintln!("{}:{}", "Error saving the config.".red(), e),
+                            };
+                            key
+                        }
+                        Err(e) => {
+                            eprintln!("{}", e);
+                            std::process::exit(1);
+                        }
+                    };
+
+                    api_key
                 }
             };
 

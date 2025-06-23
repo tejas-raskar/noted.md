@@ -72,7 +72,7 @@ impl GeminiClient {
         file_data: FileData,
     ) -> Result<GeminiResponse, reqwest::Error> {
         let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemma-3-12b-it:generateContent?key={}",
+            "https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key={}",
             self.api_key
         );
 

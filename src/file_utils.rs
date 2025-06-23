@@ -12,8 +12,8 @@ pub fn process_file(file_path: &str) -> Result<FileData, std::io::Error> {
     let mime_type = get_file_mime_type(file_path);
 
     Ok(FileData {
-        encoded_data: encoded_data,
-        mime_type: mime_type,
+        encoded_data,
+        mime_type,
     })
 }
 
@@ -21,7 +21,9 @@ pub fn get_file_mime_type(file_path: &str) -> String {
     let file_extension = Path::new(file_path)
         .extension()
         .and_then(|ext| ext.to_str());
-    let mime_type = match file_extension {
+    
+
+    match file_extension {
         Some("png") => "image/png".to_string(),
         Some("pdf") => "application/pdf".to_string(),
         Some("jpg") => "image/jpeg".to_string(),
@@ -30,7 +32,5 @@ pub fn get_file_mime_type(file_path: &str) -> String {
             println!("Warning: Unknown file type, defaulting to application/octet-stream");
             "application/octet-stream".to_string()
         }
-    };
-
-    mime_type
+    }
 }
