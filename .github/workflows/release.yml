@@ -7,10 +7,11 @@ on:
 
 jobs:
   build-and-upload:
-    name: Build and upload
+    name: Build (${{ matrix.build }})
     runs-on: ${{ matrix.os }}
 
     strategy:
+      fail-fast: false
       matrix:
         include:
           - build: linux

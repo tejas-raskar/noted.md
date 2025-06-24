@@ -9,6 +9,7 @@ clap = { version = "4.5.40", features = ["derive", "env"] }
 tokio = { version = "1.45.1", features = ["full"] }
 reqwest = { version = "0.12", features = ["json"] }
 serde = { version = "1.0.219", features = ["derive"] }
+openssl = { version = "0.10", features = ["vendored"] }
 serde_json = "1.0.140"
 toml = "0.8.23"
 directories = "6.0.0"
