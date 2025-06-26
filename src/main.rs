@@ -7,14 +7,17 @@ mod ui;
 use clap::Parser;
 use cli::{Cli, Commands};
 use colored::*;
-use config::Config;
-use config::GeminiConfig;
+use config::{Config, GeminiConfig, OllamaConfig};
+use dialoguer::Input;
+use dialoguer::Select;
 use dialoguer::{Password, theme::ColorfulTheme};
 use gemini_client::GeminiClient;
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
 use std::path::Path;
 use ui::ascii_art;
+
+use crate::config::get_config_path;
 
 async fn process_and_save_file(
     file_path: &str,
@@ -143,14 +146,108 @@ async fn main() {
                 }
             }
 
-            if let Some(key) = set_api_key {
+            if let Some(ref key) = set_api_key {
                 let mut config = Config::load();
-                config.gemini = Some(config::GeminiConfig { api_key: key });
+                config.gemini = Some(config::GeminiConfig {
+                    api_key: key.to_string(),
+                });
 
                 if let Err(e) = config.save() {
                     println!("Error while saving config: {}", e)
                 } else {
                     println!("Config saved successfully.");
+                }
+            }
+
+            if !show_path && set_api_key.is_none() {
+                if let Some(config_path) = get_config_path() {
+                    if config_path.exists() {
+                        let config = Config::load();
+                        println!("{:#?}", config)
+                    } else {
+                        ascii_art();
+                        println!(
+                            "{}\n",
+                            "Welcome to noted.md! Let's set up your AI provider.".bold()
+                        );
+
+                        let providers = vec![
+                            "Gemini API (Cloud-based, requires API key)",
+                            "Ollama (Local, requires Ollama to be set up)",
+                        ];
+                        let selected_provider = Select::with_theme(&ColorfulTheme::default())
+                            .with_prompt("Choose your AI provider")
+                            .items(&providers)
+                            .default(0)
+                            .interact()
+                            .unwrap();
+
+                        match selected_provider {
+                            0 => {
+                                let mut config = Config::load();
+                                let _api_key = match Password::with_theme(&ColorfulTheme::default())
+                                    .with_prompt("Enter your Gemini API key: ")
+                                    .interact()
+                                {
+                                    Ok(key) => {
+                                        config.active_provider = Some("gemini".to_string());
+                                        config.gemini = Some(GeminiConfig {
+                                            api_key: key.clone(),
+                                        });
+                                        let _save = match config.save() {
+                                            Ok(()) => {
+                                                println!("{}", "Config saved successfully.".green())
+                                            }
+                                            Err(e) => eprintln!(
+                                                "{}:{}",
+                                                "Error saving the config.".red(),
+                                                e
+                                            ),
+                                        };
+                                        key
+                                    }
+                                    Err(e) => {
+                                        eprintln!("{}", e);
+                                        std::process::exit(1);
+                                    }
+                                };
+                            }
+                            1 => {
+                                let url = Input::with_theme(&ColorfulTheme::default())
+                                    .with_prompt("Ollama server url")
+                                    .default("http://localhost:11434".to_string())
+                                    .interact_text()
+                                    .unwrap();
+
+                                let model = Input::with_theme(&ColorfulTheme::default())
+                                    .with_prompt("Ollama model")
+                                    .default("Gemma3:27b".to_string())
+                                    .interact_text()
+                                    .unwrap();
+
+                                let mut config = Config::default();
+                                config.active_provider = Some("ollama".to_string());
+                                config.ollama = Some(OllamaConfig {
+                                    url: url,
+                                    model: model,
+                                });
+                                let _save = match config.save() {
+                                    Ok(()) => {
+                                        println!("{}", "Config saved successfully.".green())
+                                    }
+                                    Err(e) => {
+                                        eprintln!("{}:{}", "Error saving the config.".red(), e)
+                                    }
+                                };
+                            }
+                            _ => unreachable!(),
+                        }
+                        println!(
+                            "{}",
+                            "You can now run 'notedmd convert <file>' to convert your files."
+                                .cyan()
+                        );
+                    }
                 }
             }
         }

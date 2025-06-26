@@ -5,12 +5,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Config {
+    pub active_provider: Option<String>,
     pub gemini: Option<GeminiConfig>,
+    pub ollama: Option<OllamaConfig>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct GeminiConfig {
     pub api_key: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct OllamaConfig {
+    pub url: String,
+    pub model: String,
 }
 
 pub fn get_config_path() -> Option<PathBuf> {
