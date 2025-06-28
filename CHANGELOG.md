@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.1]
+
+### Added
+  - Ollama provider support in onboarding (configuration only)
+  - Provider abstraction for AI client support
+  - Unified configuration via `notedmd config` command
+
+  ### Changed
+  - Improved provider selection and configuration flow in onboarding process
+
 ## [0.1.0]
 
 ### Added

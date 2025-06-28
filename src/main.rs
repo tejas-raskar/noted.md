@@ -1,9 +1,11 @@
+mod ai_provider;
 mod cli;
 mod config;
 mod file_utils;
 mod gemini_client;
 mod ui;
 
+use ai_provider::AiProvider;
 use clap::Parser;
 use cli::{Cli, Commands};
 use colored::*;
@@ -21,7 +23,7 @@ use crate::config::get_config_path;
 
 async fn process_and_save_file(
     file_path: &str,
-    client: &GeminiClient,
+    client: &dyn AiProvider,
     output_dir: Option<&str>,
     progress_bar: &ProgressBar,
 ) {
@@ -64,42 +66,16 @@ async fn process_and_save_file(
         "File read successfully.".green()
     ));
 
-    progress_bar.set_message(format!("{}", "Sending to Gemini...".yellow()));
+    progress_bar.set_message(format!("{}", "Sending to your AI model...".yellow()));
 
-    let response = match client.send_request(file_data).await {
-        Ok(res) => res,
+    let markdown = match client.send_request(file_data).await {
+        Ok(cleaned_markdown) => cleaned_markdown,
         Err(e) => {
-            progress_bar.println(format!(
-                "{} {}",
-                "✖".red(),
-                format!("Error calling Gemini: {}", e).red()
-            ));
+            progress_bar.println(format!("{} {}", "✖".red(), format!("Error: {}", e).red()));
             return;
         }
     };
-    progress_bar.println(format!(
-        "{} {}",
-        "✔".green(),
-        "Received response from Gemini".green()
-    ));
-
-    let response_text = response
-        .candidates
-        .first()
-        .and_then(|candidate| candidate.content.parts.first());
-    let markdown_text = if let Some(part) = response_text {
-        &part.text
-    } else {
-        progress_bar.println(format!(
-            "Could not find text in Gemini response for {:?}. Skipping.",
-            file_name
-        ));
-        return;
-    };
-
-    let cleaned_markdown = markdown_text
-        .trim_start_matches("```markdown\n")
-        .trim_end_matches("```");
+    progress_bar.println(format!("{} {}", "✔".green(), "Received response.".green()));
 
     let output_path = match output_dir {
         Some(dir) => {
@@ -113,7 +89,7 @@ async fn process_and_save_file(
         None => path.with_extension("md").to_string_lossy().into_owned(),
     };
 
-    match std::fs::write(&output_path, cleaned_markdown) {
+    match std::fs::write(&output_path, markdown) {
         Ok(_) => progress_bar.println(format!(
             "{} {}",
             "✔".green(),
@@ -256,39 +232,33 @@ async fn main() {
             output,
             api_key,
         } => {
-            let final_api_key = if let Some(key) = api_key {
-                key
-            } else {
-                let mut config = Config::load();
-                if let Some(gemini_config) = config.gemini {
-                    gemini_config.api_key
-                } else {
-                    ascii_art();
-                    let api_key = match Password::with_theme(&ColorfulTheme::default())
-                        .with_prompt("Enter your Gemini API key: ")
-                        .interact()
-                    {
-                        Ok(key) => {
-                            config.gemini = Some(GeminiConfig {
-                                api_key: key.clone(),
-                            });
-                            let _save = match config.save() {
-                                Ok(()) => println!("{}", "Config saved successfully.".green()),
-                                Err(e) => eprintln!("{}:{}", "Error saving the config.".red(), e),
-                            };
-                            key
-                        }
-                        Err(e) => {
-                            eprintln!("{}", e);
-                            std::process::exit(1);
-                        }
+            let config = Config::load();
+            let client: Box<dyn AiProvider> = match config.active_provider.as_deref() {
+                Some("gemini") => {
+                    let final_api_key = if let Some(key) = api_key {
+                        key
+                    } else if let Some(gemini_config) = &config.gemini {
+                        gemini_config.api_key.clone()
+                    } else {
+                        eprintln!("{}", "Gemini is not configured properly. Run 'notedmd config' to configure it.".red());
+                        std::process::exit(1);
                     };
-
-                    api_key
+                    Box::new(GeminiClient::new(final_api_key))
+                }
+                Some("ollama") => {
+                    eprintln!("Ollama support coming soon!");
+                    std::process::exit(1);
+                }
+                _ => {
+                    eprintln!(
+                        "{}",
+                        "notedmd is not configured. Run 'notedmd config' to configure it first."
+                            .red()
+                    );
+                    std::process::exit(1);
                 }
             };
 
-            let client = GeminiClient::new(final_api_key);
             let input_path = Path::new(&path);
             if input_path.is_dir() {
                 let files_to_convert: Vec<_> = std::fs::read_dir(input_path)
@@ -317,7 +287,7 @@ async fn main() {
                 for file_path_buf in files_to_convert {
                     process_and_save_file(
                         file_path_buf.to_str().unwrap(),
-                        &client,
+                        client.as_ref(),
                         output.as_deref(),
                         &progress_bar,
                     )
@@ -335,7 +305,8 @@ async fn main() {
                         .unwrap(),
                 );
                 progress_bar.set_message("Processing file...");
-                process_and_save_file(&path, &client, output.as_deref(), &progress_bar).await;
+                process_and_save_file(&path, client.as_ref(), output.as_deref(), &progress_bar)
+                    .await;
                 progress_bar.inc(1);
                 progress_bar
                     .finish_with_message(format!("{}", "Completed processing file".green()));

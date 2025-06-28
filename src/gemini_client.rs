@@ -1,7 +1,8 @@
+use crate::ai_provider::AiProvider;
+use crate::file_utils::FileData;
+use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-
-use crate::file_utils::FileData;
 
 // Request structs
 
@@ -66,11 +67,14 @@ impl GeminiClient {
             api_key,
         }
     }
+}
 
-    pub async fn send_request(
+#[async_trait]
+impl AiProvider for GeminiClient {
+    async fn send_request(
         &self,
         file_data: FileData,
-    ) -> Result<GeminiResponse, reqwest::Error> {
+    ) -> Result<String, Box<dyn std::error::Error>> {
         let url = format!(
             "https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key={}",
             self.api_key
@@ -104,6 +108,22 @@ impl GeminiClient {
             .await?
             .json::<GeminiResponse>()
             .await?;
-        Ok(response)
+
+        let response_text = response
+            .candidates
+            .first()
+            .and_then(|candidate| candidate.content.parts.first());
+        let markdown_text = if let Some(part) = response_text {
+            &part.text
+        } else {
+            println!("{}", "Could not find text in Gemini response.");
+            std::process::exit(1);
+        };
+
+        let cleaned_markdown = markdown_text
+            .trim_start_matches("```markdown\n")
+            .trim_end_matches("```");
+
+        Ok(cleaned_markdown.to_string())
     }
 }
