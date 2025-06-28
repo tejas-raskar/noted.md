@@ -31,20 +31,20 @@
 
 | Binary Name | Platform & Architecture |
 |------------|------------------------|
-| `notedmd-v0.1.0-x86_64-unknown-linux-musl.tar.gz` | Linux (64-bit Intel/AMD) |
-| `notedmd-v0.1.0-x86_64-apple-darwin.tar.gz` | macOS (64-bit Intel) |
-| `notedmd-v0.1.0-aarch64-apple-darwin.tar.gz` | macOS (Apple Silicon/M1/M2) |
-| `notedmd-v0.1.0-x86_64-pc-windows-msvc.zip` | Windows (64-bit Intel/AMD) |
+| `notedmd-v0.1.1-x86_64-unknown-linux-musl.tar.gz` | Linux (64-bit Intel/AMD) |
+| `notedmd-v0.1.1-x86_64-apple-darwin.tar.gz` | macOS (64-bit Intel) |
+| `notedmd-v0.1.1-aarch64-apple-darwin.tar.gz` | macOS (Apple Silicon/M series) |
+| `notedmd-v0.1.1-x86_64-pc-windows-msvc.zip` | Windows (64-bit Intel/AMD) |
 
 
 Choose the instructions below that match your system:
 ### macOS
 
-1. Download the latest macOS archive (e.g., `notedmd-v0.1.0-aarch64-apple-darwin.tar.gz`) from the [Releases page](https://github.com/tejas-raskar/noted.md/releases/latest)
+1. Download the latest macOS archive (e.g., `notedmd-v0.1.1-aarch64-apple-darwin.tar.gz`) from the [Releases page](https://github.com/tejas-raskar/noted.md/releases/latest)
 2. Open Terminal and follow the below steps:
    ```bash
    cd ~/Downloads
-   tar -xzf notedmd-v0.1.0-aarch64-apple-darwin.tar.gz
+   tar -xzf notedmd-v0.1.1-aarch64-apple-darwin.tar.gz
    sudo mv notedmd-*/bin/notedmd /usr/local/bin/
    ```
 3. Verify the installation:
@@ -54,7 +54,7 @@ Choose the instructions below that match your system:
 
 ### Windows
 
-1. Download the latest Windows archive (e.g., `notedmd-v0.1.0-x86_64-pc-windows-msvc.zip`) from the [Releases page](https://github.com/tejas-raskar/noted.md/releases/latest)
+1. Download the latest Windows archive (e.g., `notedmd-v0.1.1-x86_64-pc-windows-msvc.zip`) from the [Releases page](https://github.com/tejas-raskar/noted.md/releases/latest)
 2. Right-click the downloaded ZIP file and select "Extract All"
 3. Choose a destination folder (e.g., `C:\Program Files\noted.md`)
 4. Copy the extracted files to the chosen location:
@@ -82,11 +82,11 @@ Choose the instructions below that match your system:
 
 ### Linux
 
-1. Download the latest Linux archive (e.g., `notedmd-v0.1.0-x86_64-unknown-linux-musl.tar.gz`) from the [Releases page](https://github.com/tejas-raskar/noted.md/releases/latest)
+1. Download the latest Linux archive (e.g., `notedmd-v0.1.1-x86_64-unknown-linux-musl.tar.gz`) from the [Releases page](https://github.com/tejas-raskar/noted.md/releases/latest)
 2. Open Terminal and follow the below steps:
    ```bash
    cd ~/Downloads
-   tar -xzf notedmd-v0.1.0-x86_64-unknown-linux-musl.tar.gz
+   tar -xzf notedmd-v0.1.1-x86_64-unknown-linux-musl.tar.gz
    sudo mv notedmd-*/bin/notedmd /usr/local/bin/
    ```
 3. Verify the installation:
@@ -110,9 +110,11 @@ cargo install --git https://github.com/tejas-raskar/noted.md.git
 
 You will need a Gemini API key before starting to convert files. You can get one from [Google AI Studio](https://aistudio.google.com/app/apikey).
 
-You can set the API key in one of three ways:
+Run `notedmd config` initially to configure your AI provider. Ollama support soon!
 
--   **Using the `config` command (recommended)**:
+You can change the Gemini API key in one of two ways:
+
+-   **Using the `config` command**:
 
     ```bash
     notedmd config --set-api-key YOUR_GEMINI_API_KEY
