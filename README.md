@@ -31,10 +31,10 @@
 
 | Binary Name | Platform & Architecture |
 |------------|------------------------|
-| `notedmd-v0.1.1-x86_64-unknown-linux-musl.tar.gz` | Linux (64-bit Intel/AMD) |
-| `notedmd-v0.1.1-x86_64-apple-darwin.tar.gz` | macOS (64-bit Intel) |
-| `notedmd-v0.1.1-aarch64-apple-darwin.tar.gz` | macOS (Apple Silicon/M series) |
-| `notedmd-v0.1.1-x86_64-pc-windows-msvc.zip` | Windows (64-bit Intel/AMD) |
+| `notedmd-v0.2.0-x86_64-unknown-linux-musl.tar.gz` | Linux (64-bit Intel/AMD) |
+| `notedmd-v0.2.0-x86_64-apple-darwin.tar.gz` | macOS (64-bit Intel) |
+| `notedmd-v0.2.0-aarch64-apple-darwin.tar.gz` | macOS (Apple Silicon/M series) |
+| `notedmd-v0.2.0-x86_64-pc-windows-msvc.zip` | Windows (64-bit Intel/AMD) |
 
 
 Choose the instructions below that match your system:
@@ -110,7 +110,9 @@ cargo install --git https://github.com/tejas-raskar/noted.md.git
 
 You will need a Gemini API key before starting to convert files. You can get one from [Google AI Studio](https://aistudio.google.com/app/apikey).
 
-Run `notedmd config` initially to configure your AI provider. Ollama support soon!
+Run `notedmd config` initially to configure your AI provider. You can choose between:
+  - Gemini API (recommended)
+  - Ollama
 
 You can change the Gemini API key in one of two ways:
 
