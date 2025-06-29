@@ -108,13 +108,14 @@ cargo install --git https://github.com/tejas-raskar/noted.md.git
 
 ### 1. Configuration
 
-You will need a Gemini API key before starting to convert files. You can get one from [Google AI Studio](https://aistudio.google.com/app/apikey).
-
-Run `notedmd config` initially to configure your AI provider. You can choose between:
-  - Gemini API (recommended)
+Run `notedmd config` to configure your AI provider. You can choose between:
+  - Gemini API **(recommended)**
   - Ollama
 
-You can change the Gemini API key in one of two ways:
+#### Gemini API
+You can get the Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey).
+
+If you wish to change the Gemini API key later, you can do it in one of two ways:
 
 -   **Using the `config` command**:
 
@@ -129,6 +130,11 @@ You can change the Gemini API key in one of two ways:
     ```bash
     notedmd convert my_file.pdf --api-key YOUR_GEMINI_API_KEY
     ```
+
+
+#### Ollama
+Make sure Ollama is installed and running. You can download Ollama from [Ollama's website](https://ollama.com/).
+
 
 You can see where the configuration is stored by running:
 ```bash
