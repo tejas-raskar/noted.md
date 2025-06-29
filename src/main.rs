@@ -3,6 +3,7 @@ mod cli;
 mod config;
 mod file_utils;
 mod gemini_client;
+mod ollama_client;
 mod ui;
 
 use ai_provider::AiProvider;
@@ -16,6 +17,7 @@ use dialoguer::{Password, theme::ColorfulTheme};
 use gemini_client::GeminiClient;
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
+use ollama_client::OllamaClient;
 use std::path::Path;
 use ui::ascii_art;
 
@@ -197,7 +199,7 @@ async fn main() {
 
                                 let model = Input::with_theme(&ColorfulTheme::default())
                                     .with_prompt("Ollama model")
-                                    .default("Gemma3:27b".to_string())
+                                    .default("gemma3:27b".to_string())
                                     .interact_text()
                                     .unwrap();
 
@@ -231,6 +233,7 @@ async fn main() {
             path,
             output,
             api_key,
+            prompt,
         } => {
             let config = Config::load();
             let client: Box<dyn AiProvider> = match config.active_provider.as_deref() {
@@ -243,11 +246,22 @@ async fn main() {
                         eprintln!("{}", "Gemini is not configured properly. Run 'notedmd config' to configure it.".red());
                         std::process::exit(1);
                     };
-                    Box::new(GeminiClient::new(final_api_key))
+                    Box::new(GeminiClient::new(final_api_key, prompt))
                 }
                 Some("ollama") => {
-                    eprintln!("Ollama support coming soon!");
-                    std::process::exit(1);
+                    let url = if let Some(ollama_config) = &config.ollama {
+                        ollama_config.url.clone()
+                    } else {
+                        eprintln!("{}", "Ollama is not configured properly. Run 'notedmd config' to configure it.".red());
+                        std::process::exit(1);
+                    };
+                    let model = if let Some(ollama_config) = &config.ollama {
+                        ollama_config.model.clone()
+                    } else {
+                        eprintln!("{}", "Ollama is not configured properly. Run 'notedmd config' to configure it.".red());
+                        std::process::exit(1);
+                    };
+                    Box::new(OllamaClient::new(url, model, prompt))
                 }
                 _ => {
                     eprintln!(

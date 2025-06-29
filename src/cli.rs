@@ -29,6 +29,10 @@ pub enum Commands {
         /// API key for conversion
         #[arg(long, env = "GEMINI_API_KEY", hide_env_values = true)]
         api_key: Option<String>,
+
+        // Prompt the LLM
+        #[arg(short, long, help = "Add a custom prompt to pass to the LLM")]
+        prompt: Option<String>,
     },
 
     /// Configure notedmd settings

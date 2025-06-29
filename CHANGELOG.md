@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.0]
+
+### Added
+  - Added Ollama support
+  - Added a `prompt` option to the `convert` command to override the default prompt.
+
 ## [0.1.1]
 
 ### Added
