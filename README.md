@@ -27,80 +27,36 @@
 
 ## Installation
 
-`noted.md` can be installed on all major operating systems.
+`noted.md` can be installed on macOS, Linux, and Windows.
 
-| Binary Name | Platform & Architecture |
-|------------|------------------------|
-| `notedmd-v0.2.0-x86_64-unknown-linux-musl.tar.gz` | Linux (64-bit Intel/AMD) |
-| `notedmd-v0.2.0-x86_64-apple-darwin.tar.gz` | macOS (64-bit Intel) |
-| `notedmd-v0.2.0-aarch64-apple-darwin.tar.gz` | macOS (Apple Silicon/M series) |
-| `notedmd-v0.2.0-x86_64-pc-windows-msvc.zip` | Windows (64-bit Intel/AMD) |
+### macOS & Linux (Recommended: Homebrew)
 
-
-Choose the instructions below that match your system:
-### macOS
-
-1. Download the latest macOS archive (e.g., `notedmd-v0.1.1-aarch64-apple-darwin.tar.gz`) from the [Releases page](https://github.com/tejas-raskar/noted.md/releases/latest)
-2. Open Terminal and follow the below steps:
-   ```bash
-   cd ~/Downloads
-   tar -xzf notedmd-v0.1.1-aarch64-apple-darwin.tar.gz
-   sudo mv notedmd-*/bin/notedmd /usr/local/bin/
-   ```
-3. Verify the installation:
-   ```bash
-   notedmd --version
-   ```
-
-### Windows
-
-1. Download the latest Windows archive (e.g., `notedmd-v0.1.1-x86_64-pc-windows-msvc.zip`) from the [Releases page](https://github.com/tejas-raskar/noted.md/releases/latest)
-2. Right-click the downloaded ZIP file and select "Extract All"
-3. Choose a destination folder (e.g., `C:\Program Files\noted.md`)
-4. Copy the extracted files to the chosen location:
-   - The directory structure should look like:
-     ```
-     C:\Program Files\noted.md\
-     ├── bin\
-     │   └── notedmd.exe
-     ├── LICENSE
-     ├── README.md
-     └── CHANGELOG.md
-     ```
-5. Add the bin directory to your PATH:
-   - Open Start and search for "Environment Variables"
-   - Click "Edit the system environment variables"
-   - Click "Environment Variables"
-   - Under "System Variables", find and select "Path"
-   - Click "Edit" and then "New"
-   - Add the path to the bin directory (e.g., `C:\Program Files\noted.md\bin`)
-   - Click "OK" on all windows
-6. Open a new Command Prompt and verify the installation:
-   ```cmd
-   notedmd --version
-   ```
-
-### Linux
-
-1. Download the latest Linux archive (e.g., `notedmd-v0.1.1-x86_64-unknown-linux-musl.tar.gz`) from the [Releases page](https://github.com/tejas-raskar/noted.md/releases/latest)
-2. Open Terminal and follow the below steps:
-   ```bash
-   cd ~/Downloads
-   tar -xzf notedmd-v0.1.1-x86_64-unknown-linux-musl.tar.gz
-   sudo mv notedmd-*/bin/notedmd /usr/local/bin/
-   ```
-3. Verify the installation:
-   ```bash
-   notedmd --version
-   ```
-
-
-### Building from source
-
-If you have Rust installed, you can also build `noted.md` from source:
+For the easiest installation on macOS and Linux, use Homebrew:
 
 ```bash
-cargo install --git https://github.com/tejas-raskar/noted.md.git
+brew tap tejas-raskar/noted.md
+brew install notedmd
+```
+
+To update `noted.md` to the latest version:
+
+```bash
+brew upgrade notedmd
+```
+
+### Manual Download (Windows)
+
+For Windows, download the latest `.zip` archive from the [Releases page](https://github.com/tejas-raskar/noted.md/releases/latest). Extract the contents and add the `bin` directory to your system's PATH.
+
+### Building from Source
+
+If you prefer to build from source, clone the repository and use Cargo:
+
+```bash
+git clone https://github.com/tejas-raskar/noted.md.git
+cd noted.md
+cargo build --release
+# The executable will be in target/release/notedmd
 ```
 
 

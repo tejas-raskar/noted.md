@@ -21,7 +21,6 @@ pub fn get_file_mime_type(file_path: &str) -> String {
     let file_extension = Path::new(file_path)
         .extension()
         .and_then(|ext| ext.to_str());
-    
 
     match file_extension {
         Some("png") => "image/png".to_string(),

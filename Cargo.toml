@@ -2,6 +2,12 @@
 name = "notedmd"
 version = "0.2.0"
 edition = "2024"
+description = "A command-line tool to convert handwritten notes into a clean and readable Markdown file."
+license = "MIT"
+repository = "https://github.com/tejas-raskar/noted.md"
+readme = "README.md"
+keywords = ["cli", "notes", "markdown", "gemini", "ollama"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 base64 = "0.22.1"
