@@ -126,6 +126,7 @@ async fn main() {
 
             if let Some(ref key) = set_api_key {
                 let mut config = Config::load();
+                config.active_provider = Some("gemini".to_string());
                 config.gemini = Some(config::GeminiConfig {
                     api_key: key.to_string(),
                 });

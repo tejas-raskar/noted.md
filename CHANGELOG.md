@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.1]
+
+### Fixed
+- Fixed a bug where `active_provider` was not being set when using `--set-api-key` option.
+
 ## [0.2.0]
 
 ### Added
