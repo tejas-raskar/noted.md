@@ -16,6 +16,7 @@
 <p align="center">
   <a href="https://github.com/tejas-raskar/noted.md/actions"><img src="https://github.com/tejas-raskar/noted.md/actions/workflows/release.yml/badge.svg" alt="Build Status"></a>
   <a href="http://github.com/tejas-raskar/noted.md/releases"><img src="https://img.shields.io/github/v/tag/tejas-raskar/noted.md" alt="Version"></a>
+  <a href="http://github.com/tejas-raskar/noted.md/releases"><img src="https://img.shields.io/github/downloads/tejas-raskar/noted.md/total?color=red" alt="Downloads"></a>
   <a href="https://github.com/tejas-raskar/noted.md/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
 </p>
 
@@ -66,25 +67,32 @@ cargo build --release
 
 Run `notedmd config` to configure your AI provider. You can choose between:
   - Gemini API **(recommended)**
+  - Claude API
   - Ollama
 
-#### Gemini API
-You can get the Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey).
+#### Gemini and Claude APIs
+You can get the API keys from their respective websites:
+- **Gemini API:** [Google AI Studio](https://aistudio.google.com/app/apikey)
+- **Claude API:** [Anthropic's website](https://console.anthropic.com/dashboard)
 
-If you wish to change the Gemini API key later, you can do it in one of two ways:
+During the initial `notedmd config` setup, you will be prompted for your key.
+
+If you wish to change the API key later, you can do so in two ways:
 
 -   **Using the `config` command**:
-
-    ```bash
-    notedmd config --set-api-key YOUR_GEMINI_API_KEY
-    ```
+    - For Gemini:
+      ```bash
+      notedmd config --set-api-key YOUR_GEMINI_API_KEY
+      ```
+    - For Claude:
+      ```bash
+      notedmd config --set-claude-api-key YOUR_CLAUDE_API_KEY
+      ```
 
 -   **Using the `--api-key` flag**:
-
-    Pass the key directly with the `convert` command.
-
+    This flag overrides the active provider's API key for a single `convert` command.
     ```bash
-    notedmd convert my_file.pdf --api-key YOUR_GEMINI_API_KEY
+    notedmd convert my_file.pdf --api-key YOUR_API_KEY
     ```
 
 
