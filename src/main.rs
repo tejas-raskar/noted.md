@@ -1,4 +1,5 @@
 mod ai_provider;
+mod claude_client;
 mod cli;
 mod config;
 mod file_utils;
@@ -8,9 +9,10 @@ mod ui;
 
 use ai_provider::AiProvider;
 use clap::Parser;
+use claude_client::ClaudeClient;
 use cli::{Cli, Commands};
 use colored::*;
-use config::{Config, GeminiConfig, OllamaConfig};
+use config::{ClaudeConfig, Config, GeminiConfig, OllamaConfig};
 use dialoguer::Input;
 use dialoguer::Select;
 use dialoguer::{Password, theme::ColorfulTheme};
@@ -112,6 +114,7 @@ async fn main() {
         Commands::Config {
             set_api_key,
             show_path,
+            set_claude_api_key,
         } => {
             if show_path {
                 if let Some(config_path) = config::get_config_path() {
@@ -138,7 +141,28 @@ async fn main() {
                 }
             }
 
-            if !show_path && set_api_key.is_none() {
+            if let Some(ref key) = set_claude_api_key {
+                let mut config = Config::load();
+                config.active_provider = Some("claude".to_string());
+                let model = Input::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Claude model")
+                    .default("claude-3-opus-20240229".to_string())
+                    .interact_text()
+                    .unwrap();
+
+                config.claude = Some(config::ClaudeConfig {
+                    api_key: key.to_string(),
+                    model: model,
+                });
+
+                if let Err(e) = config.save() {
+                    println!("Error while saving config: {}", e)
+                } else {
+                    println!("Config saved successfully.");
+                }
+            }
+
+            if !show_path && set_api_key.is_none() && set_claude_api_key.is_none() {
                 if let Some(config_path) = get_config_path() {
                     if config_path.exists() {
                         let config = Config::load();
@@ -152,6 +176,7 @@ async fn main() {
 
                         let providers = vec![
                             "Gemini API (Cloud-based, requires API key)",
+                            "Claude API (Cloud-based, requires API key)",
                             "Ollama (Local, requires Ollama to be set up)",
                         ];
                         let selected_provider = Select::with_theme(&ColorfulTheme::default())
@@ -192,6 +217,42 @@ async fn main() {
                                 };
                             }
                             1 => {
+                                let mut config = Config::load();
+                                let _api_key = match Password::with_theme(&ColorfulTheme::default())
+                                    .with_prompt("Enter your Claude API key: ")
+                                    .interact()
+                                {
+                                    Ok(key) => {
+                                        config.active_provider = Some("claude".to_string());
+                                        let model = Input::with_theme(&ColorfulTheme::default())
+                                            .with_prompt("Claude model")
+                                            .default("claude-3-opus-20240229".to_string())
+                                            .interact_text()
+                                            .unwrap();
+
+                                        config.claude = Some(ClaudeConfig {
+                                            api_key: key.clone(),
+                                            model: model,
+                                        });
+                                        let _save = match config.save() {
+                                            Ok(()) => {
+                                                println!("{}", "Config saved successfully.".green())
+                                            }
+                                            Err(e) => eprintln!(
+                                                "{}:{}",
+                                                "Error saving the config.".red(),
+                                                e
+                                            ),
+                                        };
+                                        key
+                                    }
+                                    Err(e) => {
+                                        eprintln!("{}", e);
+                                        std::process::exit(1);
+                                    }
+                                };
+                            }
+                            2 => {
                                 let url = Input::with_theme(&ColorfulTheme::default())
                                     .with_prompt("Ollama server url")
                                     .default("http://localhost:11434".to_string())
@@ -263,6 +324,25 @@ async fn main() {
                         std::process::exit(1);
                     };
                     Box::new(OllamaClient::new(url, model, prompt))
+                }
+                Some("claude") => {
+                    let api_key = if let Some(key) = api_key {
+                        key
+                    } else if let Some(claude_config) = &config.claude {
+                        claude_config.api_key.clone()
+                    } else {
+                        eprintln!("{}", "Claude is not configured properly. Run 'notedmd config' to configure it.".red());
+                        std::process::exit(1);
+                    };
+
+                    let model = if let Some(claude_config) = &config.claude {
+                        claude_config.model.clone()
+                    } else {
+                        eprintln!("{}", "Claude is not configured properly. Run 'notedmd config' to configure it.".red());
+                        std::process::exit(1);
+                    };
+
+                    Box::new(ClaudeClient::new(api_key, model, prompt))
                 }
                 _ => {
                     eprintln!(

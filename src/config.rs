@@ -8,6 +8,13 @@ pub struct Config {
     pub active_provider: Option<String>,
     pub gemini: Option<GeminiConfig>,
     pub ollama: Option<OllamaConfig>,
+    pub claude: Option<ClaudeConfig>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct ClaudeConfig {
+    pub api_key: String,
+    pub model: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]

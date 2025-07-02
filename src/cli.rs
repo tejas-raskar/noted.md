@@ -41,6 +41,10 @@ pub enum Commands {
         #[arg(long, help = "Set your Gemini API key for future use")]
         set_api_key: Option<String>,
 
+        /// Set your Claude API key
+        #[arg(long, help = "Set your Claude API key for future use")]
+        set_claude_api_key: Option<String>,
+
         /// Show config file location
         #[arg(long, help = "Display the path to your configuration file")]
         show_path: bool,
