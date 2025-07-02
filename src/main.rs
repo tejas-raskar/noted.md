@@ -1,25 +1,24 @@
 mod ai_provider;
-mod claude_client;
 mod cli;
+mod clients;
 mod config;
 mod file_utils;
-mod gemini_client;
-mod ollama_client;
 mod ui;
 
 use ai_provider::AiProvider;
 use clap::Parser;
-use claude_client::ClaudeClient;
 use cli::{Cli, Commands};
 use colored::*;
 use config::{ClaudeConfig, Config, GeminiConfig, OllamaConfig};
 use dialoguer::Input;
 use dialoguer::Select;
 use dialoguer::{Password, theme::ColorfulTheme};
-use gemini_client::GeminiClient;
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
-use ollama_client::OllamaClient;
+
+use crate::clients::claude_client::ClaudeClient;
+use crate::clients::gemini_client::GeminiClient;
+use crate::clients::ollama_client::OllamaClient;
 use std::path::Path;
 use ui::ascii_art;
 

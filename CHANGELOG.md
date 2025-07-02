@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.2]
+
+### Added
+- Added Claude support.
+
+### Changed
+- Refactored the project to move the individual client files to a client subfolder.
+
 ## [0.2.1]
 
 ### Fixed
