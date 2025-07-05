@@ -223,16 +223,44 @@ async fn main() {
                                 {
                                     Ok(key) => {
                                         config.active_provider = Some("claude".to_string());
-                                        let model = Input::with_theme(&ColorfulTheme::default())
-                                            .with_prompt("Claude model")
-                                            .default("claude-3-opus-20240229".to_string())
-                                            .interact_text()
-                                            .unwrap();
+                                        let anthropic_models = vec![
+                                            "    claude-opus-4-20250514",
+                                            "    claude-sonnet-4-20250514",
+                                            "    claude-3-7-sonnet-20250219",
+                                            "    claude-3-5-haiku-20241022",
+                                            "    claude-3-5-sonnet-20241022",
+                                            "    other",
+                                        ];
+                                        let selected_model =
+                                            Select::with_theme(&ColorfulTheme::default())
+                                                .with_prompt("Choose your Claude model:")
+                                                .items(&anthropic_models)
+                                                .default(0)
+                                                .interact()
+                                                .unwrap();
 
-                                        config.claude = Some(ClaudeConfig {
-                                            api_key: key.clone(),
-                                            model: model,
-                                        });
+                                        if selected_model == &anthropic_models.len() - 1 {
+                                            let other_model =
+                                                Input::with_theme(&ColorfulTheme::default())
+                                                    .with_prompt(
+                                                        "Enter the custom model name (e.g., claude-3-sonnet-20240229)",
+                                                    )
+                                                    .interact()
+                                                    .unwrap();
+
+                                            config.claude = Some(ClaudeConfig {
+                                                api_key: key.clone(),
+                                                model: other_model,
+                                            });
+                                        } else {
+                                            config.claude = Some(ClaudeConfig {
+                                                api_key: key.clone(),
+                                                model: anthropic_models[selected_model]
+                                                    .trim()
+                                                    .to_string(),
+                                            });
+                                        }
+
                                         let _save = match config.save() {
                                             Ok(()) => {
                                                 println!("{}", "Config saved successfully.".green())
