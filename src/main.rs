@@ -20,7 +20,7 @@ use crate::clients::claude_client::ClaudeClient;
 use crate::clients::gemini_client::GeminiClient;
 use crate::clients::ollama_client::OllamaClient;
 use std::path::Path;
-use ui::ascii_art;
+use ui::{ascii_art, print_clean_config};
 
 use crate::config::get_config_path;
 
@@ -112,15 +112,30 @@ async fn main() {
     match args.command {
         Commands::Config {
             set_api_key,
-            show_path,
             set_claude_api_key,
+            set_provider,
+            show_path,
+            show,
+            edit,
         } => {
             if show_path {
                 if let Some(config_path) = config::get_config_path() {
                     if config_path.exists() {
                         println!("Config saved in {:?}", config_path);
                     } else {
-                        eprintln!("No config path found.");
+                        eprintln!("No config found.\nRun 'notedmd config --edit' to configure.");
+                        return;
+                    }
+                }
+            }
+
+            if show {
+                if let Some(config_path) = config::get_config_path() {
+                    if config_path.exists() {
+                        let config = Config::load();
+                        print_clean_config(config);
+                    } else {
+                        eprintln!("No config found.\nRun 'notedmd config --edit' to configure.");
                         return;
                     }
                 }
@@ -161,142 +176,36 @@ async fn main() {
                 }
             }
 
-            if !show_path && set_api_key.is_none() && set_claude_api_key.is_none() {
-                if let Some(config_path) = get_config_path() {
-                    if config_path.exists() {
-                        let config = Config::load();
-                        println!("{:#?}", config)
-                    } else {
-                        ascii_art();
-                        println!(
-                            "{}\n",
-                            "Welcome to noted.md! Let's set up your AI provider.".bold()
-                        );
+            if edit {
+                ascii_art();
+                println!(
+                    "{}\n",
+                    "Welcome to noted.md! Let's set up your AI provider.".bold()
+                );
 
-                        let providers = vec![
-                            "Gemini API (Cloud-based, requires API key)",
-                            "Claude API (Cloud-based, requires API key)",
-                            "Ollama (Local, requires Ollama to be set up)",
-                        ];
-                        let selected_provider = Select::with_theme(&ColorfulTheme::default())
-                            .with_prompt("Choose your AI provider")
-                            .items(&providers)
-                            .default(0)
+                let providers = vec![
+                    "Gemini API (Cloud-based, requires API key)",
+                    "Claude API (Cloud-based, requires API key)",
+                    "Ollama (Local, requires Ollama to be set up)",
+                ];
+                let selected_provider = Select::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Choose your AI provider")
+                    .items(&providers)
+                    .default(0)
+                    .interact()
+                    .unwrap();
+
+                match selected_provider {
+                    0 => {
+                        let mut config = Config::load();
+                        let _api_key = match Password::with_theme(&ColorfulTheme::default())
+                            .with_prompt("Enter your Gemini API key: ")
                             .interact()
-                            .unwrap();
-
-                        match selected_provider {
-                            0 => {
-                                let mut config = Config::load();
-                                let _api_key = match Password::with_theme(&ColorfulTheme::default())
-                                    .with_prompt("Enter your Gemini API key: ")
-                                    .interact()
-                                {
-                                    Ok(key) => {
-                                        config.active_provider = Some("gemini".to_string());
-                                        config.gemini = Some(GeminiConfig {
-                                            api_key: key.clone(),
-                                        });
-                                        let _save = match config.save() {
-                                            Ok(()) => {
-                                                println!("{}", "Config saved successfully.".green())
-                                            }
-                                            Err(e) => eprintln!(
-                                                "{}:{}",
-                                                "Error saving the config.".red(),
-                                                e
-                                            ),
-                                        };
-                                        key
-                                    }
-                                    Err(e) => {
-                                        eprintln!("{}", e);
-                                        std::process::exit(1);
-                                    }
-                                };
-                            }
-                            1 => {
-                                let mut config = Config::load();
-                                let _api_key = match Password::with_theme(&ColorfulTheme::default())
-                                    .with_prompt("Enter your Claude API key: ")
-                                    .interact()
-                                {
-                                    Ok(key) => {
-                                        config.active_provider = Some("claude".to_string());
-                                        let anthropic_models = vec![
-                                            "    claude-opus-4-20250514",
-                                            "    claude-sonnet-4-20250514",
-                                            "    claude-3-7-sonnet-20250219",
-                                            "    claude-3-5-haiku-20241022",
-                                            "    claude-3-5-sonnet-20241022",
-                                            "    other",
-                                        ];
-                                        let selected_model =
-                                            Select::with_theme(&ColorfulTheme::default())
-                                                .with_prompt("Choose your Claude model:")
-                                                .items(&anthropic_models)
-                                                .default(0)
-                                                .interact()
-                                                .unwrap();
-
-                                        if selected_model == &anthropic_models.len() - 1 {
-                                            let other_model =
-                                                Input::with_theme(&ColorfulTheme::default())
-                                                    .with_prompt(
-                                                        "Enter the custom model name (e.g., claude-3-sonnet-20240229)",
-                                                    )
-                                                    .interact()
-                                                    .unwrap();
-
-                                            config.claude = Some(ClaudeConfig {
-                                                api_key: key.clone(),
-                                                model: other_model,
-                                            });
-                                        } else {
-                                            config.claude = Some(ClaudeConfig {
-                                                api_key: key.clone(),
-                                                model: anthropic_models[selected_model]
-                                                    .trim()
-                                                    .to_string(),
-                                            });
-                                        }
-
-                                        let _save = match config.save() {
-                                            Ok(()) => {
-                                                println!("{}", "Config saved successfully.".green())
-                                            }
-                                            Err(e) => eprintln!(
-                                                "{}:{}",
-                                                "Error saving the config.".red(),
-                                                e
-                                            ),
-                                        };
-                                        key
-                                    }
-                                    Err(e) => {
-                                        eprintln!("{}", e);
-                                        std::process::exit(1);
-                                    }
-                                };
-                            }
-                            2 => {
-                                let url = Input::with_theme(&ColorfulTheme::default())
-                                    .with_prompt("Ollama server url")
-                                    .default("http://localhost:11434".to_string())
-                                    .interact_text()
-                                    .unwrap();
-
-                                let model = Input::with_theme(&ColorfulTheme::default())
-                                    .with_prompt("Ollama model")
-                                    .default("gemma3:27b".to_string())
-                                    .interact_text()
-                                    .unwrap();
-
-                                let mut config = Config::default();
-                                config.active_provider = Some("ollama".to_string());
-                                config.ollama = Some(OllamaConfig {
-                                    url: url,
-                                    model: model,
+                        {
+                            Ok(key) => {
+                                config.active_provider = Some("gemini".to_string());
+                                config.gemini = Some(GeminiConfig {
+                                    api_key: key.clone(),
                                 });
                                 let _save = match config.save() {
                                     Ok(()) => {
@@ -306,14 +215,163 @@ async fn main() {
                                         eprintln!("{}:{}", "Error saving the config.".red(), e)
                                     }
                                 };
+                                key
                             }
-                            _ => unreachable!(),
-                        }
-                        println!(
-                            "{}",
-                            "You can now run 'notedmd convert <file>' to convert your files."
-                                .cyan()
+                            Err(e) => {
+                                eprintln!("{}", e);
+                                std::process::exit(1);
+                            }
+                        };
+                    }
+                    1 => {
+                        let mut config = Config::load();
+                        let _api_key = match Password::with_theme(&ColorfulTheme::default())
+                            .with_prompt("Enter your Claude API key: ")
+                            .interact()
+                        {
+                            Ok(key) => {
+                                config.active_provider = Some("claude".to_string());
+                                let anthropic_models = vec![
+                                    "    claude-opus-4-20250514",
+                                    "    claude-sonnet-4-20250514",
+                                    "    claude-3-7-sonnet-20250219",
+                                    "    claude-3-5-haiku-20241022",
+                                    "    claude-3-5-sonnet-20241022",
+                                    "    other",
+                                ];
+                                let selected_model = Select::with_theme(&ColorfulTheme::default())
+                                    .with_prompt("Choose your Claude model:")
+                                    .items(&anthropic_models)
+                                    .default(0)
+                                    .interact()
+                                    .unwrap();
+
+                                if selected_model == &anthropic_models.len() - 1 {
+                                    let other_model =
+                                        Input::with_theme(&ColorfulTheme::default())
+                                            .with_prompt(
+                                                "Enter the custom model name (e.g., claude-3-sonnet-20240229)",
+                                            )
+                                            .interact()
+                                            .unwrap();
+
+                                    config.claude = Some(ClaudeConfig {
+                                        api_key: key.clone(),
+                                        model: other_model,
+                                    });
+                                } else {
+                                    config.claude = Some(ClaudeConfig {
+                                        api_key: key.clone(),
+                                        model: anthropic_models[selected_model].trim().to_string(),
+                                    });
+                                }
+
+                                let _save = match config.save() {
+                                    Ok(()) => {
+                                        println!("{}", "Config saved successfully.".green())
+                                    }
+                                    Err(e) => {
+                                        eprintln!("{}:{}", "Error saving the config.".red(), e)
+                                    }
+                                };
+                                key
+                            }
+                            Err(e) => {
+                                eprintln!("{}", e);
+                                std::process::exit(1);
+                            }
+                        };
+                    }
+                    2 => {
+                        let url = Input::with_theme(&ColorfulTheme::default())
+                            .with_prompt("Ollama server url")
+                            .default("http://localhost:11434".to_string())
+                            .interact_text()
+                            .unwrap();
+
+                        let model = Input::with_theme(&ColorfulTheme::default())
+                            .with_prompt("Ollama model")
+                            .default("gemma3:27b".to_string())
+                            .interact_text()
+                            .unwrap();
+
+                        let mut config = Config::default();
+                        config.active_provider = Some("ollama".to_string());
+                        config.ollama = Some(OllamaConfig {
+                            url: url,
+                            model: model,
+                        });
+                        let _save = match config.save() {
+                            Ok(()) => {
+                                println!("{}", "Config saved successfully.".green())
+                            }
+                            Err(e) => {
+                                eprintln!("{}:{}", "Error saving the config.".red(), e)
+                            }
+                        };
+                    }
+                    _ => unreachable!(),
+                }
+                println!(
+                    "{}",
+                    "You can now run 'notedmd convert <file>' to convert your files.".cyan()
+                );
+            }
+
+            if let Some(ref new_provider) = set_provider {
+                if let Some(config_path) = get_config_path() {
+                    if !config_path.exists() {
+                        eprintln!(
+                            "No configuration file found. Please run 'notedmd config --edit' to get started."
                         );
+                        return;
+                    }
+
+                    let mut config = Config::load();
+                    let new_provider_str = new_provider.as_str();
+                    let is_configured = match new_provider_str {
+                        "gemini" => config.gemini.is_some(),
+                        "claude" => config.claude.is_some(),
+                        "ollama" => config.ollama.is_some(),
+                        _ => {
+                            eprintln!(
+                                "Invalid provider '{}'. Please choose from 'gemini', 'claude', or 'ollama'.",
+                                new_provider
+                            );
+                            return;
+                        }
+                    };
+
+                    if is_configured {
+                        config.active_provider = Some(new_provider_str.to_string());
+                        if let Err(e) = config.save() {
+                            eprintln!("{}: {}", "Error saving the config.".red(), e);
+                        } else {
+                            println!("Active provider set to '{}'.", new_provider_str.cyan());
+                        }
+                    } else {
+                        eprintln!(
+                            "{} is not configured. Please run 'notedmd config --edit' to set it up.",
+                            new_provider_str.yellow()
+                        );
+                    }
+                }
+            }
+
+            if !edit
+                && !show
+                && !show_path
+                && set_api_key.is_none()
+                && set_claude_api_key.is_none()
+                && set_provider.is_none()
+            {
+                if let Some(config_path) = get_config_path() {
+                    if config_path.exists() {
+                        let config = Config::load();
+                        print_clean_config(config);
+                    } else {
+                        eprintln!("No config found.\nRun 'notedmd config --edit' to configure.");
+                        return;
                     }
                 }
             }

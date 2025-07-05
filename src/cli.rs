@@ -45,8 +45,20 @@ pub enum Commands {
         #[arg(long, help = "Set your Claude API key for future use")]
         set_claude_api_key: Option<String>,
 
+        // Set active provider
+        #[arg(long, help = "Set the active provider")]
+        set_provider: Option<String>,
+
         /// Show config file location
-        #[arg(long, help = "Display the path to your configuration file")]
+        #[arg(long, help = "Shows the location of your configuration file")]
         show_path: bool,
+
+        // Show config file
+        #[arg(long, help = "Shows the content of your configuration")]
+        show: bool,
+
+        // Trigger onboarding flow
+        #[arg(long, help = "Edit the configuration file")]
+        edit: bool,
     },
 }
