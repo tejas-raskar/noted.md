@@ -1,7 +1,8 @@
 use crate::ai_provider::AiProvider;
+use crate::error::NotedError;
 use crate::file_utils::FileData;
 use async_trait::async_trait;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 
 // Request structs
@@ -42,6 +43,13 @@ struct Source {
 #[derive(Deserialize, Debug)]
 pub struct ClaudeResponse {
     pub content: Vec<ContentResponse>,
+    #[serde(default)]
+    pub error: Option<ClaudeError>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ClaudeError {
+    pub message: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -70,10 +78,7 @@ impl ClaudeClient {
 
 #[async_trait]
 impl AiProvider for ClaudeClient {
-    async fn send_request(
-        &self,
-        file_data: FileData,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    async fn send_request(&self, file_data: FileData) -> Result<String, NotedError> {
         let url = "https://api.anthropic.com/v1/messages".to_string();
 
         let prompt = if let Some(custom_prompt) = &self.prompt {
@@ -113,20 +118,42 @@ impl AiProvider for ClaudeClient {
             .header("anthropic-version", "2023-06-01")
             .json(&request_body)
             .send()
-            .await?
-            .json::<ClaudeResponse>()
             .await?;
 
-        let response_text = response.content.first();
-        let markdown_text = if let Some(part) = response_text {
-            &part.text
-        } else {
-            println!("{}", "Could not find text in Claude response.");
-            std::process::exit(1);
-        };
+        let status = response.status();
+        let response_body = response.text().await?;
+
+        if status != StatusCode::OK {
+            if status == StatusCode::UNAUTHORIZED {
+                return Err(NotedError::InvalidApiKey);
+            }
+            let error_response: Result<ClaudeResponse, _> = serde_json::from_str(&response_body);
+            if let Ok(err_resp) = error_response {
+                if let Some(error) = err_resp.error {
+                    return Err(NotedError::ApiError(error.message));
+                }
+            }
+            return Err(NotedError::ApiError(format!(
+                "Received status code: {}",
+                status
+            )));
+        }
+
+        let claude_response: ClaudeResponse = serde_json::from_str(&response_body)
+            .map_err(|e| NotedError::ResponseDecodeError(e.to_string()))?;
+
+        if let Some(error) = claude_response.error {
+            return Err(NotedError::ApiError(error.message));
+        }
+
+        let markdown_text = claude_response
+            .content
+            .first()
+            .map(|c| c.text.as_str())
+            .unwrap_or("");
 
         let cleaned_markdown = markdown_text
-            .trim_start_matches("```markdown")
+            .trim_start_matches("```markdown\n")
             .trim_end_matches("```");
 
         Ok(cleaned_markdown.to_string())

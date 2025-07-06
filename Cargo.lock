@@ -820,7 +820,7 @@ dependencies = [
 
 [[package]]
 name = "notedmd"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "async-trait",
  "base64",
@@ -833,6 +833,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "thiserror 2.0.12",
  "tokio",
  "toml",
 ]

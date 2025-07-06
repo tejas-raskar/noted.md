@@ -1,7 +1,8 @@
 use crate::ai_provider::AiProvider;
+use crate::error::NotedError;
 use crate::file_utils::FileData;
 use async_trait::async_trait;
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 
 // Request structs
@@ -36,7 +37,14 @@ struct InlineData {
 
 #[derive(Deserialize, Debug)]
 pub struct GeminiResponse {
-    pub candidates: Vec<Candidate>,
+    pub candidates: Option<Vec<Candidate>>,
+    #[serde(default)]
+    pub error: Option<GeminiError>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct GeminiError {
+    pub message: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -73,10 +81,7 @@ impl GeminiClient {
 
 #[async_trait]
 impl AiProvider for GeminiClient {
-    async fn send_request(
-        &self,
-        file_data: FileData,
-    ) -> Result<String, Box<dyn std::error::Error>> {
+    async fn send_request(&self, file_data: FileData) -> Result<String, NotedError> {
         let url = format!(
             "https://generativelanguage.googleapis.com/v1beta/models/gemma-3-27b-it:generateContent?key={}",
             self.api_key
@@ -106,25 +111,41 @@ impl AiProvider for GeminiClient {
             }],
         };
 
-        let response = self
-            .client
-            .post(&url)
-            .json(&request_body)
-            .send()
-            .await?
-            .json::<GeminiResponse>()
-            .await?;
+        let response = self.client.post(&url).json(&request_body).send().await?;
 
-        let response_text = response
+        let status = response.status();
+        let response_body = response.text().await?;
+
+        if status != StatusCode::OK {
+            if status == StatusCode::UNAUTHORIZED {
+                return Err(NotedError::InvalidApiKey);
+            }
+            let error_response: Result<GeminiResponse, _> = serde_json::from_str(&response_body);
+            if let Ok(err_resp) = error_response {
+                if let Some(error) = err_resp.error {
+                    return Err(NotedError::ApiError(error.message));
+                }
+            }
+            return Err(NotedError::ApiError(format!(
+                "Received status code: {}",
+                status
+            )));
+        }
+
+        let gemini_response: GeminiResponse = serde_json::from_str(&response_body)
+            .map_err(|e| NotedError::ResponseDecodeError(e.to_string()))?;
+
+        if let Some(error) = gemini_response.error {
+            return Err(NotedError::ApiError(error.message));
+        }
+
+        let markdown_text = gemini_response
             .candidates
-            .first()
-            .and_then(|candidate| candidate.content.parts.first());
-        let markdown_text = if let Some(part) = response_text {
-            &part.text
-        } else {
-            println!("{}", "Could not find text in Gemini response.");
-            std::process::exit(1);
-        };
+            .as_ref()
+            .and_then(|candidates| candidates.first())
+            .and_then(|candidate| candidate.content.parts.first())
+            .map(|part| part.text.as_str())
+            .unwrap_or("");
 
         let cleaned_markdown = markdown_text
             .trim_start_matches("```markdown\n")
