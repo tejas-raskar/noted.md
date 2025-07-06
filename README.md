@@ -60,69 +60,97 @@ cargo build --release
 # The executable will be in target/release/notedmd
 ```
 
-
 ## Usage
 
-### 1. Configuration
+The typical workflow is:
+1.  **Configure your AI provider**: Use `notedmd config --edit` for a guided setup.
+2.  **Convert your files**: Use `notedmd convert <path>` to process your notes.
 
-Run `notedmd config` to configure your AI provider. You can choose between:
-  - Gemini API **(recommended)**
-  - Claude API
-  - Ollama
+### Commands
+
+| Command           | Description                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------ |
+| `notedmd convert` | Converts a file or all supported files in a directory into Markdown.                 |
+| `notedmd config`  | Manages the AI provider configuration. Shows the current config if no flags are used. |
+
+---
+
+## Configuration
+
+### Interactive Setup (Recommended)
+
+For first-time users, the interactive setup is the easiest way to get started. Run:
+```bash
+notedmd config --edit
+```
+This will guide you through selecting an AI provider (Gemini, Claude, or Ollama) and entering the necessary credentials, such as API keys or server details.
+
+### AI Providers
+
+You can choose between three AI providers.
 
 #### Gemini and Claude APIs
-You can get the API keys from their respective websites:
+You will need an API key from your chosen provider:
 - **Gemini API:** [Google AI Studio](https://aistudio.google.com/app/apikey)
 - **Claude API:** [Anthropic's website](https://console.anthropic.com/dashboard)
 
-During the initial `notedmd config` setup, you will be prompted for your key.
-
-If you wish to change the API key later, you can do so in two ways:
-
--   **Using the `config` command**:
-    - For Gemini:
-      ```bash
-      notedmd config --set-api-key YOUR_GEMINI_API_KEY
-      ```
-    - For Claude:
-      ```bash
-      notedmd config --set-claude-api-key YOUR_CLAUDE_API_KEY
-      ```
-
--   **Using the `--api-key` flag**:
-    This flag overrides the active provider's API key for a single `convert` command.
-    ```bash
-    notedmd convert my_file.pdf --api-key YOUR_API_KEY
-    ```
-
-
 #### Ollama
-Make sure Ollama is installed and running. You can download Ollama from [Ollama's website](https://ollama.com/).
+Make sure Ollama is installed and running on your local machine. You can download it from [Ollama's website](https://ollama.com/).
 
+### Managing Configuration via Flags
 
-You can see where the configuration is stored by running:
-```bash
-notedmd config --show-path
-```
+You can also manage your configuration directly using flags.
 
-### 2. Converting Files
+| Flag                             | Description                                                                 |
+| -------------------------------- | --------------------------------------------------------------------------- |
+| `--set-provider <provider>`      | Set the active provider (`gemini`, `claude`, `ollama`).                       |
+| `--set-api-key <key>`            | Set the API key for Gemini.                                                 |
+| `--set-claude-api-key <key>`     | Set the API key for Claude.                                                 |
+| `--show`                         | Display the current configuration.                                          |
+| `--show-path`                    | Show the absolute path to your configuration file.                          |
+| `--edit`                         | Start the interactive configuration wizard.                                 |
+
+**Examples:**
+- Set the active provider to Claude:
+  ```bash
+  notedmd config --set-provider claude
+  ```
+- Set your Gemini API key:
+  ```bash
+  notedmd config --set-api-key YOUR_GEMINI_API_KEY
+  ```
+
+---
+
+## Converting Files
+
+Once configured, you can convert your handwritten notes.
+
+| Flag                             | Description                                                                 |
+| -------------------------------- | --------------------------------------------------------------------------- |
+| `-o`, `--output <dir>`           | Specify a directory to save the converted Markdown file(s).                 |
+| `-p`, `--prompt <prompt>`        | Add a custom prompt to override the default instructions for the LLM.       |
+| `--api-key <key>`                | Temporarily override the stored API key for a single `convert` command.     |
+
+**Examples:**
 
 -   **Convert a single file**:
-
     The converted file will be saved in the same directory with a `.md` extension (e.g., `my_document.md`).
-
     ```bash
     notedmd convert my_document.pdf
     ```
 
--   **Convert a single file to a specific output directory**:
+-   **Convert a file with a custom prompt**:
+    ```bash
+    notedmd convert my_notes.png --prompt "Transcribe this into a bulleted list."
+    ```
 
+-   **Convert a file and save it to a different directory**:
     ```bash
     notedmd convert my_document.pdf --output ./markdown_notes/
     ```
 
 -   **Convert all supported files in a directory**:
-
     ```bash
     notedmd convert ./my_project_files/
     ```

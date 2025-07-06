@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.3]
+
+### Added
+- Added `--show`, `--edit`, and `--set-provider` subcommands to the `config` command for better configuration management.
+
+### Changed
+- Updated the Claude model selection from a text input to a selection menu to improve user experience and prevent typos.
+
+### Fixed
+- Resolved an issue where API errors in successful (`200 OK`) responses were ignored, preventing silent failures.
+- Corrected a bug where configuring the Ollama provider would erase all other existing provider settings.
+
 ## [0.2.2]
 
 ### Added
