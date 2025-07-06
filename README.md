@@ -24,7 +24,9 @@
 
 `noted.md` is a CLI tool that uses LLMs to convert your handwritten text into markdown files. It's an interactive program that accepts pdfs, jpg, jpeg, png as an input and processes them accordingly. It can recognize mathematical equations too and can correctly format them in LaTeX. And if you have bunch of files to convert them at once, `noted.md` supports batch processing too!
 
-![notedmd](https://github.com/user-attachments/assets/c844305f-3311-47c6-8358-4b709f81ab37)
+
+https://github.com/user-attachments/assets/5e2f4ab5-2043-4ea4-b95d-bf63e36ce9d9
+
 
 ## Installation
 
@@ -103,11 +105,11 @@ You can also manage your configuration directly using flags.
 
 | Flag                             | Description                                                                 |
 | -------------------------------- | --------------------------------------------------------------------------- |
-| `--set-provider <provider>`      | Set the active provider (`gemini`, `claude`, `ollama`).                       |
+| `--set-provider <provider>`      | Set the active provider (`gemini`, `claude`, `ollama`).                     |
 | `--set-api-key <key>`            | Set the API key for Gemini.                                                 |
 | `--set-claude-api-key <key>`     | Set the API key for Claude.                                                 |
 | `--show`                         | Display the current configuration.                                          |
-| `--show-path`                    | Show the absolute path to your configuration file.                          |
+| `--show-path`                    | Show the path to your configuration file.                                   |
 | `--edit`                         | Start the interactive configuration wizard.                                 |
 
 **Examples:**
