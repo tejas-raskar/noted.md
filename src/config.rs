@@ -1,7 +1,7 @@
-use std::{fs, path::PathBuf};
-
+use crate::error::NotedError;
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
+use std::{fs, path::PathBuf};
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Config {
@@ -39,17 +39,17 @@ pub fn get_config_path() -> Option<PathBuf> {
 }
 
 impl Config {
-    pub fn load() -> Self {
+    pub fn load() -> Result<Self, NotedError> {
         if let Some(config_path) = get_config_path() {
             if config_path.exists() {
-                let content = fs::read_to_string(config_path).unwrap_or_default();
-                return toml::from_str(&content).unwrap_or_default();
+                let content = fs::read_to_string(config_path)?;
+                return Ok(toml::from_str(&content)?);
             }
         }
-        Self::default()
+        Ok(Self::default())
     }
 
-    pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn save(&self) -> Result<(), NotedError> {
         if let Some(config_path) = get_config_path() {
             let toml_string = toml::to_string_pretty(self)?;
             fs::write(config_path, toml_string)?;

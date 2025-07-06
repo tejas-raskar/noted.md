@@ -1,6 +1,6 @@
 [package]
 name = "notedmd"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2024"
 description = "A command-line tool to convert handwritten notes into a clean and readable Markdown file."
 license = "MIT"
@@ -23,3 +23,4 @@ dialoguer = "0.11.0"
 colored = "3.0.0"
 indicatif = "0.17.11"
 async-trait = "0.1.88"
+thiserror = "2.0.12"

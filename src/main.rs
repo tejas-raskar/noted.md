@@ -2,6 +2,7 @@ mod ai_provider;
 mod cli;
 mod clients;
 mod config;
+mod error;
 mod file_utils;
 mod ui;
 
@@ -13,6 +14,7 @@ use config::{ClaudeConfig, Config, GeminiConfig, OllamaConfig};
 use dialoguer::Input;
 use dialoguer::Select;
 use dialoguer::{Password, theme::ColorfulTheme};
+use error::NotedError;
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
 
@@ -29,21 +31,12 @@ async fn process_and_save_file(
     client: &dyn AiProvider,
     output_dir: Option<&str>,
     progress_bar: &ProgressBar,
-) {
+) -> Result<(), NotedError> {
     let path = Path::new(file_path);
     let file_name = match path.file_name() {
         Some(name) => name,
         None => {
-            progress_bar.println(format!(
-                "{} {}",
-                "✖".red(),
-                format!(
-                    "Could not determine filename for '{}'. Skipping.",
-                    file_path
-                )
-                .red()
-            ));
-            return;
+            return Err(NotedError::FileNameError(file_path.to_string()));
         }
     };
 
@@ -52,17 +45,7 @@ async fn process_and_save_file(
         format!("Processing file: {:#?}", file_name).bold()
     ));
 
-    let file_data = match file_utils::process_file(file_path) {
-        Ok(data) => data,
-        Err(e) => {
-            progress_bar.println(format!(
-                "{} {}",
-                "✖".red(),
-                format!("Failed to read file. Error: {}", e).red()
-            ));
-            return;
-        }
-    };
+    let file_data = file_utils::process_file(file_path)?;
     progress_bar.println(format!(
         "{} {}",
         "✔".green(),
@@ -71,18 +54,15 @@ async fn process_and_save_file(
 
     progress_bar.set_message(format!("{}", "Sending to your AI model...".yellow()));
 
-    let markdown = match client.send_request(file_data).await {
-        Ok(cleaned_markdown) => cleaned_markdown,
-        Err(e) => {
-            progress_bar.println(format!("{} {}", "✖".red(), format!("Error: {}", e).red()));
-            return;
-        }
-    };
+    let markdown = client.send_request(file_data).await?;
     progress_bar.println(format!("{} {}", "✔".green(), "Received response.".green()));
 
     let output_path = match output_dir {
         Some(dir) => {
             let dir_path = Path::new(dir);
+            if !dir_path.exists() {
+                std::fs::create_dir_all(dir_path)?;
+            }
             let final_path = dir_path.join(file_name);
             final_path
                 .with_extension("md")
@@ -93,21 +73,26 @@ async fn process_and_save_file(
     };
 
     match std::fs::write(&output_path, markdown) {
-        Ok(_) => progress_bar.println(format!(
-            "{} {}",
-            "✔".green(),
-            format!("Markdown saved to '{}'", output_path.cyan()).green()
-        )),
-        Err(e) => progress_bar.println(format!(
-            "{} {}",
-            "✖".red(),
-            format!("Failed to save file. Error: {}", e).red()
-        )),
+        Ok(_) => {
+            progress_bar.println(format!(
+                "{} {}",
+                "✔".green(),
+                format!("Markdown saved to '{}'", output_path.cyan()).green()
+            ));
+            Ok(())
+        }
+        Err(e) => {
+            progress_bar.println(format!(
+                "{} {}",
+                "✖".red(),
+                format!("Failed to save file to '{}'. Error: {}", &output_path, e).red()
+            ));
+            Err(e.into())
+        }
     }
 }
 
-#[tokio::main]
-async fn main() {
+async fn run() -> Result<(), NotedError> {
     let args = Cli::parse();
     match args.command {
         Commands::Config {
@@ -123,8 +108,7 @@ async fn main() {
                     if config_path.exists() {
                         println!("Config saved in {:?}", config_path);
                     } else {
-                        eprintln!("No config found.\nRun 'notedmd config --edit' to configure.");
-                        return;
+                        return Err(NotedError::ConfigNotFound);
                     }
                 }
             }
@@ -132,48 +116,40 @@ async fn main() {
             if show {
                 if let Some(config_path) = config::get_config_path() {
                     if config_path.exists() {
-                        let config = Config::load();
+                        let config = Config::load()?;
                         print_clean_config(config);
                     } else {
-                        eprintln!("No config found.\nRun 'notedmd config --edit' to configure.");
-                        return;
+                        return Err(NotedError::ConfigNotFound);
                     }
                 }
             }
 
             if let Some(ref key) = set_api_key {
-                let mut config = Config::load();
+                let mut config = Config::load()?;
                 config.active_provider = Some("gemini".to_string());
                 config.gemini = Some(config::GeminiConfig {
                     api_key: key.to_string(),
                 });
 
-                if let Err(e) = config.save() {
-                    println!("Error while saving config: {}", e)
-                } else {
-                    println!("Config saved successfully.");
-                }
+                config.save()?;
+                println!("Config saved successfully.");
             }
 
             if let Some(ref key) = set_claude_api_key {
-                let mut config = Config::load();
+                let mut config = Config::load()?;
                 config.active_provider = Some("claude".to_string());
                 let model = Input::with_theme(&ColorfulTheme::default())
                     .with_prompt("Claude model")
                     .default("claude-3-opus-20240229".to_string())
-                    .interact_text()
-                    .unwrap();
+                    .interact_text()?;
 
                 config.claude = Some(config::ClaudeConfig {
                     api_key: key.to_string(),
-                    model: model,
+                    model,
                 });
 
-                if let Err(e) = config.save() {
-                    println!("Error while saving config: {}", e)
-                } else {
-                    println!("Config saved successfully.");
-                }
+                config.save()?;
+                println!("Config saved successfully.");
             }
 
             if edit {
@@ -192,123 +168,67 @@ async fn main() {
                     .with_prompt("Choose your AI provider")
                     .items(&providers)
                     .default(0)
-                    .interact()
-                    .unwrap();
+                    .interact()?;
 
                 match selected_provider {
                     0 => {
-                        let mut config = Config::load();
-                        let _api_key = match Password::with_theme(&ColorfulTheme::default())
+                        let mut config = Config::load()?;
+                        let api_key = Password::with_theme(&ColorfulTheme::default())
                             .with_prompt("Enter your Gemini API key: ")
-                            .interact()
-                        {
-                            Ok(key) => {
-                                config.active_provider = Some("gemini".to_string());
-                                config.gemini = Some(GeminiConfig {
-                                    api_key: key.clone(),
-                                });
-                                let _save = match config.save() {
-                                    Ok(()) => {
-                                        println!("{}", "Config saved successfully.".green())
-                                    }
-                                    Err(e) => {
-                                        eprintln!("{}:{}", "Error saving the config.".red(), e)
-                                    }
-                                };
-                                key
-                            }
-                            Err(e) => {
-                                eprintln!("{}", e);
-                                std::process::exit(1);
-                            }
-                        };
+                            .interact()?;
+                        config.active_provider = Some("gemini".to_string());
+                        config.gemini = Some(GeminiConfig { api_key });
+                        config.save()?;
+                        println!("{}", "Config saved successfully.".green());
                     }
                     1 => {
-                        let mut config = Config::load();
-                        let _api_key = match Password::with_theme(&ColorfulTheme::default())
+                        let mut config = Config::load()?;
+                        let api_key = Password::with_theme(&ColorfulTheme::default())
                             .with_prompt("Enter your Claude API key: ")
-                            .interact()
-                        {
-                            Ok(key) => {
-                                config.active_provider = Some("claude".to_string());
-                                let anthropic_models = vec![
-                                    "    claude-opus-4-20250514",
-                                    "    claude-sonnet-4-20250514",
-                                    "    claude-3-7-sonnet-20250219",
-                                    "    claude-3-5-haiku-20241022",
-                                    "    claude-3-5-sonnet-20241022",
-                                    "    other",
-                                ];
-                                let selected_model = Select::with_theme(&ColorfulTheme::default())
-                                    .with_prompt("Choose your Claude model:")
-                                    .items(&anthropic_models)
-                                    .default(0)
-                                    .interact()
-                                    .unwrap();
+                            .interact()?;
+                        config.active_provider = Some("claude".to_string());
+                        let anthropic_models = vec![
+                            "    claude-opus-4-20250514",
+                            "    claude-sonnet-4-20250514",
+                            "    claude-3-7-sonnet-20250219",
+                            "    claude-3-5-haiku-20241022",
+                            "    claude-3-5-sonnet-20241022",
+                            "    Other",
+                        ];
+                        let selected_model = Select::with_theme(&ColorfulTheme::default())
+                            .with_prompt("Choose your Claude model:")
+                            .items(&anthropic_models)
+                            .default(0)
+                            .interact()?;
 
-                                if selected_model == &anthropic_models.len() - 1 {
-                                    let other_model =
-                                        Input::with_theme(&ColorfulTheme::default())
-                                            .with_prompt(
-                                                "Enter the custom model name (e.g., claude-3-sonnet-20240229)",
-                                            )
-                                            .interact()
-                                            .unwrap();
-
-                                    config.claude = Some(ClaudeConfig {
-                                        api_key: key.clone(),
-                                        model: other_model,
-                                    });
-                                } else {
-                                    config.claude = Some(ClaudeConfig {
-                                        api_key: key.clone(),
-                                        model: anthropic_models[selected_model].trim().to_string(),
-                                    });
-                                }
-
-                                let _save = match config.save() {
-                                    Ok(()) => {
-                                        println!("{}", "Config saved successfully.".green())
-                                    }
-                                    Err(e) => {
-                                        eprintln!("{}:{}", "Error saving the config.".red(), e)
-                                    }
-                                };
-                                key
-                            }
-                            Err(e) => {
-                                eprintln!("{}", e);
-                                std::process::exit(1);
-                            }
+                        let model = if selected_model == anthropic_models.len() - 1 {
+                            Input::with_theme(&ColorfulTheme::default())
+                                .with_prompt("Enter the custom model name:")
+                                .interact_text()?
+                        } else {
+                            anthropic_models[selected_model].trim().to_string()
                         };
+
+                        config.claude = Some(ClaudeConfig { api_key, model });
+                        config.save()?;
+                        println!("{}", "Config saved successfully.".green());
                     }
                     2 => {
                         let url = Input::with_theme(&ColorfulTheme::default())
                             .with_prompt("Ollama server url")
                             .default("http://localhost:11434".to_string())
-                            .interact_text()
-                            .unwrap();
+                            .interact_text()?;
 
                         let model = Input::with_theme(&ColorfulTheme::default())
                             .with_prompt("Ollama model")
                             .default("gemma3:27b".to_string())
-                            .interact_text()
-                            .unwrap();
+                            .interact_text()?;
 
-                        let mut config = Config::default();
+                        let mut config = Config::load()?;
                         config.active_provider = Some("ollama".to_string());
-                        config.ollama = Some(OllamaConfig {
-                            url: url,
-                            model: model,
-                        });
-                        let _save = match config.save() {
-                            Ok(()) => {
-                                println!("{}", "Config saved successfully.".green())
-                            }
-                            Err(e) => {
-                                eprintln!("{}:{}", "Error saving the config.".red(), e)
-                            }
-                        };
+                        config.ollama = Some(OllamaConfig { url, model });
+                        config.save()?;
+                        println!("{}", "Config saved successfully.".green());
                     }
                     _ => unreachable!(),
                 }
@@ -321,13 +241,10 @@ async fn main() {
             if let Some(ref new_provider) = set_provider {
                 if let Some(config_path) = get_config_path() {
                     if !config_path.exists() {
-                        eprintln!(
-                            "No configuration file found. Please run 'notedmd config --edit' to get started."
-                        );
-                        return;
+                        return Err(NotedError::ConfigNotFound);
                     }
 
-                    let mut config = Config::load();
+                    let mut config = Config::load()?;
                     let new_provider_str = new_provider.as_str();
                     let is_configured = match new_provider_str {
                         "gemini" => config.gemini.is_some(),
@@ -338,17 +255,14 @@ async fn main() {
                                 "Invalid provider '{}'. Please choose from 'gemini', 'claude', or 'ollama'.",
                                 new_provider
                             );
-                            return;
+                            return Ok(());
                         }
                     };
 
                     if is_configured {
                         config.active_provider = Some(new_provider_str.to_string());
-                        if let Err(e) = config.save() {
-                            eprintln!("{}: {}", "Error saving the config.".red(), e);
-                        } else {
-                            println!("Active provider set to '{}'.", new_provider_str.cyan());
-                        }
+                        config.save()?;
+                        println!("Active provider set to '{}'.", new_provider_str.cyan());
                     } else {
                         eprintln!(
                             "{} is not configured. Please run 'notedmd config --edit' to set it up.",
@@ -367,11 +281,10 @@ async fn main() {
             {
                 if let Some(config_path) = get_config_path() {
                     if config_path.exists() {
-                        let config = Config::load();
+                        let config = Config::load()?;
                         print_clean_config(config);
                     } else {
-                        eprintln!("No config found.\nRun 'notedmd config --edit' to configure.");
-                        return;
+                        return Err(NotedError::ConfigNotFound);
                     }
                 }
             }
@@ -382,7 +295,7 @@ async fn main() {
             api_key,
             prompt,
         } => {
-            let config = Config::load();
+            let config = Config::load()?;
             let client: Box<dyn AiProvider> = match config.active_provider.as_deref() {
                 Some("gemini") => {
                     let final_api_key = if let Some(key) = api_key {
@@ -390,8 +303,7 @@ async fn main() {
                     } else if let Some(gemini_config) = &config.gemini {
                         gemini_config.api_key.clone()
                     } else {
-                        eprintln!("{}", "Gemini is not configured properly. Run 'notedmd config' to configure it.".red());
-                        std::process::exit(1);
+                        return Err(NotedError::GeminiNotConfigured);
                     };
                     Box::new(GeminiClient::new(final_api_key, prompt))
                 }
@@ -399,14 +311,12 @@ async fn main() {
                     let url = if let Some(ollama_config) = &config.ollama {
                         ollama_config.url.clone()
                     } else {
-                        eprintln!("{}", "Ollama is not configured properly. Run 'notedmd config' to configure it.".red());
-                        std::process::exit(1);
+                        return Err(NotedError::OllamaNotConfigured);
                     };
                     let model = if let Some(ollama_config) = &config.ollama {
                         ollama_config.model.clone()
                     } else {
-                        eprintln!("{}", "Ollama is not configured properly. Run 'notedmd config' to configure it.".red());
-                        std::process::exit(1);
+                        return Err(NotedError::OllamaNotConfigured);
                     };
                     Box::new(OllamaClient::new(url, model, prompt))
                 }
@@ -416,44 +326,48 @@ async fn main() {
                     } else if let Some(claude_config) = &config.claude {
                         claude_config.api_key.clone()
                     } else {
-                        eprintln!("{}", "Claude is not configured properly. Run 'notedmd config' to configure it.".red());
-                        std::process::exit(1);
+                        return Err(NotedError::ClaudeNotConfigured);
                     };
 
                     let model = if let Some(claude_config) = &config.claude {
                         claude_config.model.clone()
                     } else {
-                        eprintln!("{}", "Claude is not configured properly. Run 'notedmd config' to configure it.".red());
-                        std::process::exit(1);
+                        return Err(NotedError::ClaudeNotConfigured);
                     };
 
                     Box::new(ClaudeClient::new(api_key, model, prompt))
                 }
-                _ => {
-                    eprintln!(
-                        "{}",
-                        "notedmd is not configured. Run 'notedmd config' to configure it first."
-                            .red()
-                    );
-                    std::process::exit(1);
-                }
+                _ => return Err(NotedError::NoActiveProvider),
             };
 
             let input_path = Path::new(&path);
+            if !input_path.exists() {
+                return Err(NotedError::IoError(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Input path not found: {}", path),
+                )));
+            }
+
             if input_path.is_dir() {
-                let files_to_convert: Vec<_> = std::fs::read_dir(input_path)
-                    .unwrap()
+                let files_to_convert: Vec<_> = std::fs::read_dir(input_path)?
+                    .filter_map(Result::ok)
                     .filter_map(|entry| {
-                        let entry = entry.ok()?;
                         let path = entry.path();
-                        let mime_type = file_utils::get_file_mime_type(path.to_str()?);
-                        if path.is_file() && mime_type != "application/octet-stream" {
-                            Some(path)
-                        } else {
-                            None
+                        if path.is_file() {
+                            if let Some(path_str) = path.to_str() {
+                                if file_utils::get_file_mime_type(path_str).is_ok() {
+                                    return Some(path);
+                                }
+                            }
                         }
+                        None
                     })
                     .collect();
+
+                if files_to_convert.is_empty() {
+                    println!("No supported files found in the directory.");
+                    return Ok(());
+                }
 
                 let progress_bar = ProgressBar::new(files_to_convert.len() as u64);
                 progress_bar.set_style(
@@ -461,23 +375,31 @@ async fn main() {
                         .template("{bar:40.cyan/blue} {pos}/{len} {msg}")
                         .unwrap(),
                 );
-
                 progress_bar.set_message("Processing files...");
 
                 for file_path_buf in files_to_convert {
-                    process_and_save_file(
-                        file_path_buf.to_str().unwrap(),
-                        client.as_ref(),
-                        output.as_deref(),
-                        &progress_bar,
-                    )
-                    .await;
+                    if let Some(file_path_str) = file_path_buf.to_str() {
+                        if let Err(e) = process_and_save_file(
+                            file_path_str,
+                            client.as_ref(),
+                            output.as_deref(),
+                            &progress_bar,
+                        )
+                        .await
+                        {
+                            progress_bar.println(format!("{}", e.to_string().red()));
+                        }
+                    }
                     progress_bar.inc(1);
                 }
 
                 progress_bar
                     .finish_with_message(format!("{}", "Completed processing all files".green()));
             } else {
+                let path_str = input_path.to_str().ok_or_else(|| {
+                    NotedError::FileNameError(input_path.to_string_lossy().to_string())
+                })?;
+                file_utils::get_file_mime_type(path_str)?;
                 let progress_bar = ProgressBar::new(1);
                 progress_bar.set_style(
                     ProgressStyle::default_bar()
@@ -485,12 +407,29 @@ async fn main() {
                         .unwrap(),
                 );
                 progress_bar.set_message("Processing file...");
-                process_and_save_file(&path, client.as_ref(), output.as_deref(), &progress_bar)
-                    .await;
+                if let Err(e) = process_and_save_file(
+                    path_str,
+                    client.as_ref(),
+                    output.as_deref(),
+                    &progress_bar,
+                )
+                .await
+                {
+                    progress_bar.println(format!("{}", e.to_string().red()));
+                }
                 progress_bar.inc(1);
                 progress_bar
                     .finish_with_message(format!("{}", "Completed processing file".green()));
             }
         }
+    }
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() {
+    if let Err(e) = run().await {
+        eprintln!("{} {}", "✖".red(), e.to_string().red());
+        std::process::exit(1);
     }
 }
