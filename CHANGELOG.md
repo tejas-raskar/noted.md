@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.4]
+
+### Added
+- Added support for all clients that are compatible with OpenAI's API. LM Studio for example.
+
 ## [0.2.3]
 
 ### Added

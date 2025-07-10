@@ -99,6 +99,9 @@ You will need an API key from your chosen provider:
 #### Ollama
 Make sure Ollama is installed and running on your local machine. You can download it from [Ollama's website](https://ollama.com/).
 
+#### OpenAI API compatible clients
+Supports all clients that are compatible with the OpenAI API. [LM Studio](https://lmstudio.ai/) for example.
+
 ### Managing Configuration via Flags
 
 You can also manage your configuration directly using flags.
