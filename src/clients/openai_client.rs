@@ -63,12 +63,17 @@ pub struct OpenAIClient {
     client: Client,
     url: String,
     model: String,
-    api_key: String,
+    api_key: Option<String>,
     prompt: Option<String>,
 }
 
 impl OpenAIClient {
-    pub fn new(url: String, model: String, api_key: String, prompt: Option<String>) -> Self {
+    pub fn new(
+        url: String,
+        model: String,
+        api_key: Option<String>,
+        prompt: Option<String>,
+    ) -> Self {
         Self {
             client: Client::new(),
             url,
@@ -112,13 +117,13 @@ impl AiProvider for OpenAIClient {
             }],
         };
 
-        let response = self
-            .client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .json(&request_body)
-            .send()
-            .await?;
+        let mut request = self.client.post(&url);
+
+        if let Some(api_key) = &self.api_key {
+            request = request.header("Authorization", format!("Bearer {}", api_key));
+        }
+
+        let response = request.json(&request_body).send().await?;
 
         let status = response.status();
         let response_body = response.text().await?;

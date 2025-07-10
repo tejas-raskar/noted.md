@@ -9,6 +9,7 @@ pub struct Config {
     pub gemini: Option<GeminiConfig>,
     pub ollama: Option<OllamaConfig>,
     pub claude: Option<ClaudeConfig>,
+    pub openai: Option<OpenAIConfig>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -26,6 +27,13 @@ pub struct GeminiConfig {
 pub struct OllamaConfig {
     pub url: String,
     pub model: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct OpenAIConfig {
+    pub url: String,
+    pub model: String,
+    pub api_key: Option<String>,
 }
 
 pub fn get_config_path() -> Option<PathBuf> {

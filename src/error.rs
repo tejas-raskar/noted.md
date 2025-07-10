@@ -41,6 +41,11 @@ pub enum NotedError {
     #[error(" Claude is not configured properly. Please run 'notedmd config --edit' to set it up.")]
     ClaudeNotConfigured,
 
+    #[error(
+        " OpenAI/LM Studio is not configured properly. Please run 'notedmd config --edit' to set it up."
+    )]
+    OpenAINotConfigured,
+
     #[error(" No active provider. Please run 'notedmd config --edit' to set a provider.")]
     NoActiveProvider,
 

@@ -21,6 +21,8 @@ use indicatif::ProgressStyle;
 use crate::clients::claude_client::ClaudeClient;
 use crate::clients::gemini_client::GeminiClient;
 use crate::clients::ollama_client::OllamaClient;
+use crate::clients::openai_client::OpenAIClient;
+use crate::config::OpenAIConfig;
 use std::path::Path;
 use ui::{ascii_art, print_clean_config};
 
@@ -163,6 +165,7 @@ async fn run() -> Result<(), NotedError> {
                     "Gemini API (Cloud-based, requires API key)",
                     "Claude API (Cloud-based, requires API key)",
                     "Ollama (Local, requires Ollama to be set up)",
+                    "OpenAI Compatible API (Cloud/Local, works with LM Studio)",
                 ];
                 let selected_provider = Select::with_theme(&ColorfulTheme::default())
                     .with_prompt("Choose your AI provider")
@@ -230,6 +233,38 @@ async fn run() -> Result<(), NotedError> {
                         config.save()?;
                         println!("{}", "Config saved successfully.".green());
                     }
+                    3 => {
+                        let url = Input::with_theme(&ColorfulTheme::default())
+                            .with_prompt("Server url")
+                            .default("http://localhost:1234".to_string())
+                            .interact_text()?;
+
+                        let model = Input::with_theme(&ColorfulTheme::default())
+                            .with_prompt("Model")
+                            .default("gemma3:27b".to_string())
+                            .interact_text()?;
+
+                        let api_key_str = Password::with_theme(&ColorfulTheme::default())
+                            .with_prompt("Enter your API key (Optional, press Enter if none): ")
+                            .allow_empty_password(true)
+                            .interact()?;
+
+                        let api_key = if api_key_str.is_empty() {
+                            None
+                        } else {
+                            Some(api_key_str)
+                        };
+
+                        let mut config = Config::load()?;
+                        config.active_provider = Some("openai".to_string());
+                        config.openai = Some(OpenAIConfig {
+                            url,
+                            model,
+                            api_key,
+                        });
+                        config.save()?;
+                        println!("{}", "Config saved successfully.".green());
+                    }
                     _ => unreachable!(),
                 }
                 println!(
@@ -250,6 +285,7 @@ async fn run() -> Result<(), NotedError> {
                         "gemini" => config.gemini.is_some(),
                         "claude" => config.claude.is_some(),
                         "ollama" => config.ollama.is_some(),
+                        "openai" => config.openai.is_some(),
                         _ => {
                             eprintln!(
                                 "Invalid provider '{}'. Please choose from 'gemini', 'claude', or 'ollama'.",
@@ -336,6 +372,24 @@ async fn run() -> Result<(), NotedError> {
                     };
 
                     Box::new(ClaudeClient::new(api_key, model, prompt))
+                }
+                Some("openai") => {
+                    let url = if let Some(openai_config) = &config.openai {
+                        openai_config.url.clone()
+                    } else {
+                        return Err(NotedError::OpenAINotConfigured);
+                    };
+                    let model = if let Some(openai_config) = &config.openai {
+                        openai_config.model.clone()
+                    } else {
+                        return Err(NotedError::OpenAINotConfigured);
+                    };
+                    let api_key = if let Some(openai_config) = &config.openai {
+                        openai_config.api_key.clone()
+                    } else {
+                        return Err(NotedError::OpenAINotConfigured);
+                    };
+                    Box::new(OpenAIClient::new(url, model, api_key, prompt))
                 }
                 _ => return Err(NotedError::NoActiveProvider),
             };

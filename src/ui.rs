@@ -61,4 +61,19 @@ pub fn print_clean_config(config: Config) {
     } else {
         println!("  (Not Configured)");
     }
+
+    println!("{}", "OpenAI (Compatible)".bold());
+    if let Some(openai_config) = config.openai {
+        println!("  URL:     {}", openai_config.url);
+        println!("  Model:   {}", openai_config.model);
+        let api_key = if openai_config.api_key.is_none() {
+            "API key empty.".to_string()
+        } else {
+            openai_config.api_key.unwrap()
+        };
+
+        println!("  API Key: {}", api_key);
+    } else {
+        println!("  (Not Configured)");
+    }
 }
