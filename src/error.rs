@@ -1,4 +1,5 @@
 use thiserror::Error;
+use pdf2image::PDF2ImageError;
 
 #[derive(Debug, Error)]
 pub enum NotedError {
@@ -51,4 +52,23 @@ pub enum NotedError {
 
     #[error(" Dialoguer error: {0}")]
     DialoguerError(#[from] dialoguer::Error),
+
+    #[error("JSON error: {0}")]
+    JsonError(#[from] serde_json::Error),
+
+    #[error("Image processing error: {0}")]
+    ImageError(String),
+
+    #[error("PDF processing error: {0}")]
+    PdfError(String),
+
+    #[error("Config directory error: {0}")]
+    ConfigDirError(String),
 }
+
+impl From<PDF2ImageError> for NotedError {
+    fn from(err: PDF2ImageError) -> NotedError {
+        NotedError::PdfError(err.to_string())
+    }
+}
+

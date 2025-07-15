@@ -4,6 +4,7 @@ mod clients;
 mod config;
 mod error;
 mod file_utils;
+mod pdf_utils;
 mod ui;
 
 use ai_provider::AiProvider;
@@ -23,10 +24,11 @@ use crate::clients::gemini_client::GeminiClient;
 use crate::clients::ollama_client::OllamaClient;
 use crate::clients::openai_client::OpenAIClient;
 use crate::config::OpenAIConfig;
-use std::path::Path;
+use std::{fs, path::Path};
 use ui::{ascii_art, print_clean_config};
 
 use crate::config::get_config_path;
+use crate::pdf_utils::{ProgressTracker, ProcessingProgress, process_pdf, extract_page_as_image};
 
 async fn process_and_save_file(
     file_path: &str,
@@ -47,18 +49,6 @@ async fn process_and_save_file(
         format!("Processing file: {:#?}", file_name).bold()
     ));
 
-    let file_data = file_utils::process_file(file_path)?;
-    progress_bar.println(format!(
-        "{} {}",
-        "✔".green(),
-        "File read successfully.".green()
-    ));
-
-    progress_bar.set_message(format!("{}", "Sending to your AI model...".yellow()));
-
-    let markdown = client.send_request(file_data).await?;
-    progress_bar.println(format!("{} {}", "✔".green(), "Received response.".green()));
-
     let output_path = match output_dir {
         Some(dir) => {
             let dir_path = Path::new(dir);
@@ -74,24 +64,110 @@ async fn process_and_save_file(
         None => path.with_extension("md").to_string_lossy().into_owned(),
     };
 
-    match std::fs::write(&output_path, markdown) {
-        Ok(_) => {
+    // Load progress tracker
+    let mut tracker = ProgressTracker::load()?;
+    
+    if path.extension().and_then(|ext| ext.to_str()) == Some("pdf") {
+        // Process PDF file page by page
+        let (pdf, total_pages) = process_pdf(file_path)?;
+        
+        // Get progress and existing content if any
+        let progress = tracker.get_progress(file_path)
+            .map(|p| p.last_processed_page)
+            .unwrap_or(0);
+            
+        // Read existing markdown content if it exists
+        let mut markdown_content = if progress > 0 && Path::new(&output_path).exists() {
+            fs::read_to_string(&output_path)?
+        } else {
+            String::new()
+        };
+        
+        for page_num in progress..total_pages {
             progress_bar.println(format!(
                 "{} {}",
-                "✔".green(),
-                format!("Markdown saved to '{}'", output_path.cyan()).green()
+                "📄".blue(),
+                format!("Processing page {} of {}", page_num + 1, total_pages).blue()
             ));
-            Ok(())
+            
+            let file_data = extract_page_as_image(&pdf, page_num)?;
+            
+            progress_bar.set_message(format!("{}", "Sending to your AI model...".yellow()));
+
+            // Get markdown for this page
+            let page_markdown = client.send_request(file_data).await?;
+            
+            // Add page separator if not the first content
+            if !markdown_content.is_empty() {
+                markdown_content.push_str("\n\n---\n\n");
+            }
+            markdown_content.push_str(&page_markdown);
+
+            // Save progress after each page
+            fs::write(&output_path, &markdown_content)?;
+            progress_bar.println(format!(
+                "{} {}",
+                "💾".green(),
+                format!("Progress saved to '{}'", output_path.cyan()).green()
+            ));
+
+            // Update progress
+            tracker.update_progress(
+                file_path.to_string(),
+                ProcessingProgress {
+                    last_processed_page: page_num + 1,
+                    total_pages,
+                },
+            );
+            tracker.save()?;
         }
-        Err(e) => {
-            progress_bar.println(format!(
-                "{} {}",
-                "✖".red(),
-                format!("Failed to save file to '{}'. Error: {}", &output_path, e).red()
-            ));
-            Err(e.into())
+
+        // Save final markdown
+        fs::write(&output_path, markdown_content)?;
+        
+        // Mark as completed
+        tracker.mark_completed(file_path);
+        tracker.save()?;
+
+        progress_bar.println(format!(
+            "{} {}",
+            "✔".green(),
+            format!("Markdown saved to '{}'", output_path.cyan()).green()
+        ));
+    } else {
+        // Handle non-PDF files as before
+        let file_data = file_utils::process_file(file_path)?;
+        progress_bar.println(format!(
+            "{} {}",
+            "✔".green(),
+            "File read successfully.".green()
+        ));
+
+        progress_bar.set_message(format!("{}", "Sending to your AI model...".yellow()));
+
+        let markdown = client.send_request(file_data).await?;
+        progress_bar.println(format!("{} {}", "✔".green(), "Received response.".green()));
+
+        match std::fs::write(&output_path, markdown) {
+            Ok(_) => {
+                progress_bar.println(format!(
+                    "{} {}",
+                    "✔".green(),
+                    format!("Markdown saved to '{}'", output_path.cyan()).green()
+                ));
+            }
+            Err(e) => {
+                progress_bar.println(format!(
+                    "{} {}",
+                    "✖".red(),
+                    format!("Failed to save file to '{}'. Error: {}", &output_path, e).red()
+                ));
+                return Err(e.into());
+            }
         }
     }
+    
+    Ok(())
 }
 
 async fn run() -> Result<(), NotedError> {
