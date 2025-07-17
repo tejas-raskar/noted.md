@@ -127,6 +127,27 @@ impl AiProvider for ClaudeClient {
             if status == StatusCode::UNAUTHORIZED {
                 return Err(NotedError::InvalidApiKey);
             }
+            
+            // Special handling for 400 Bad Request with detailed error logging
+            if status == StatusCode::BAD_REQUEST {
+                let error_response: Result<ClaudeResponse, _> = serde_json::from_str(&response_body);
+                if let Ok(err_resp) = error_response {
+                    if let Some(error) = err_resp.error {
+                        eprintln!("Claude API Error (400 Bad Request): {}", error.message);
+                        eprintln!("Full response body: {}", response_body);
+                        return Err(NotedError::ApiError(format!(
+                            "Bad Request: {}",
+                            error.message
+                        )));
+                    }
+                }
+                eprintln!("Claude API Error (400 Bad Request) - Full response: {}", response_body);
+                return Err(NotedError::ApiError(format!(
+                    "Bad Request (400): {}",
+                    response_body
+                )));
+            }
+            
             let error_response: Result<ClaudeResponse, _> = serde_json::from_str(&response_body);
             if let Ok(err_resp) = error_response {
                 if let Some(error) = err_resp.error {
