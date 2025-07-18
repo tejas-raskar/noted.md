@@ -87,6 +87,12 @@ impl AiProvider for ClaudeClient {
             "Take the handwritten notes from this image and convert them into a clean, well-structured Markdown file. Pay attention to headings, lists, and any other formatting. Resemble the hierarchy. Use latex for mathematical equations. For latex use the $$ syntax instead of ```latex. Do not skip anything from the original text. The output should be suitable for use in Obsidian. Just give me the markdown, do not include other text in the response apart from the markdown file. No explanation on how the changes were made is needed".to_string()
         };
 
+        let file_type = if file_data.mime_type == "application/pdf" {
+            "document".to_string()
+        } else {
+            "image".to_string()
+        };
+
         let request_body = ClaudeRequest {
             model: self.model.clone(),
             max_tokens: 4096,
@@ -94,7 +100,7 @@ impl AiProvider for ClaudeClient {
                 role: "user".to_string(),
                 content: vec![
                     Content {
-                        content_type: "image".to_string(),
+                        content_type: file_type,
                         text: None,
                         source: Some(Source {
                             source_type: "base64".to_string(),
