@@ -4,6 +4,7 @@ mod clients;
 mod config;
 mod error;
 mod file_utils;
+mod notion;
 mod ui;
 
 use ai_provider::AiProvider;
@@ -479,7 +480,6 @@ async fn run() -> Result<(), NotedError> {
     }
     Ok(())
 }
-
 #[tokio::main]
 async fn main() {
     if let Err(e) = run().await {
