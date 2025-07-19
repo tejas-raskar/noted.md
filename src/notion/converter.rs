@@ -4,8 +4,12 @@ use comrak::{
     nodes::{AstNode, ListType, NodeValue},
     parse_document,
 };
-use notion_client::objects::block::{
-    Block, BlockType, BulletedListItemValue, HeadingsValue, NumberedListItemValue, ParagraphValue,
+use notion_client::objects::{
+    block::{
+        Block, BlockType, BulletedListItemValue, EquationValue, HeadingsValue,
+        NumberedListItemValue, ParagraphValue,
+    },
+    rich_text::{self, RichText},
 };
 
 pub struct Converter<'a> {
@@ -14,7 +18,9 @@ pub struct Converter<'a> {
 
 impl<'a> Converter<'a> {
     pub fn run(markdown: &str, arena: &'a Arena<AstNode<'a>>) -> Result<Vec<Block>, anyhow::Error> {
-        let root = parse_document(arena, markdown, &ComrakOptions::default());
+        let mut options = ComrakOptions::default();
+        options.extension.math_dollars = true;
+        let root = parse_document(arena, markdown, &options);
         let mut converter = Self { arena };
         let blocks = converter.render_nodes(root.children())?;
 
@@ -34,7 +40,15 @@ impl<'a> Converter<'a> {
     fn render_node(&mut self, node: &'a AstNode<'a>) -> Result<Vec<Block>> {
         match &node.data.borrow().value {
             NodeValue::Heading(heading) => Ok(vec![self.render_heading(node, heading)?]),
-            NodeValue::Paragraph => Ok(vec![self.render_paragraph(node)?]),
+            NodeValue::Paragraph => {
+                let mut children = node.children();
+                if let (Some(child), None) = (children.next(), children.next()) {
+                    if let NodeValue::Math(_) = &child.data.borrow().value {
+                        return Ok(vec![self.render_math(child)?]);
+                    }
+                }
+                Ok(vec![self.render_paragraph(node)?])
+            }
             NodeValue::List(list) => match list.list_type {
                 ListType::Bullet => self.render_bullet_list(node),
                 ListType::Ordered => self.render_numbered_list(node),
@@ -109,6 +123,22 @@ impl<'a> Converter<'a> {
         })
     }
 
+    fn render_math(&mut self, node: &'a AstNode<'a>) -> Result<Block> {
+        if let NodeValue::Math(math) = &node.data.borrow().value {
+            let expression = math.literal.clone();
+            let value = EquationValue { expression };
+            let block_type = BlockType::Equation { equation: value };
+            Ok(Block {
+                block_type,
+                ..Default::default()
+            })
+        } else {
+            Err(anyhow::anyhow!(
+                "Node passed to render_math was not a Math node"
+            ))
+        }
+    }
+
     fn render_paragraph(&mut self, node: &'a AstNode<'a>) -> Result<Block> {
         let rich_text = self.render_rich_text(node)?;
         let value = ParagraphValue {
@@ -151,16 +181,30 @@ impl<'a> Converter<'a> {
     ) -> Result<Vec<notion_client::objects::rich_text::RichText>> {
         let mut rich_text_nodes = Vec::new();
         for child in node.children() {
-            if let NodeValue::Text(text) = &child.data.borrow().value {
-                rich_text_nodes.push(notion_client::objects::rich_text::RichText::Text {
-                    text: notion_client::objects::rich_text::Text {
-                        content: text.clone(),
-                        link: None,
-                    },
-                    annotations: Default::default(),
-                    plain_text: Some(text.clone()),
-                    href: None,
-                });
+            match &child.data.borrow().value {
+                NodeValue::Text(text) => {
+                    rich_text_nodes.push(notion_client::objects::rich_text::RichText::Text {
+                        text: notion_client::objects::rich_text::Text {
+                            content: text.clone(),
+                            link: None,
+                        },
+                        annotations: Default::default(),
+                        plain_text: Some(text.clone()),
+                        href: None,
+                    });
+                }
+                NodeValue::Math(math) => {
+                    let latex = math.literal.clone();
+                    rich_text_nodes.push(RichText::Equation {
+                        equation: rich_text::Equation {
+                            expression: latex.clone(),
+                        },
+                        annotations: Default::default(),
+                        plain_text: latex.to_string(),
+                        href: None,
+                    })
+                }
+                _ => {}
             }
         }
         Ok(rich_text_nodes)
