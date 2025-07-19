@@ -1,11 +1,11 @@
 use anyhow::Result;
 use comrak::{
     Arena, ComrakOptions,
-    nodes::{AstNode, NodeValue},
+    nodes::{AstNode, ListType, NodeValue},
     parse_document,
 };
 use notion_client::objects::block::{
-    Block, BlockType, BulletedListItemValue, HeadingsValue, ParagraphValue,
+    Block, BlockType, BulletedListItemValue, HeadingsValue, NumberedListItemValue, ParagraphValue,
 };
 
 pub struct Converter<'a> {
@@ -35,10 +35,54 @@ impl<'a> Converter<'a> {
         match &node.data.borrow().value {
             NodeValue::Heading(heading) => Ok(vec![self.render_heading(node, heading)?]),
             NodeValue::Paragraph => Ok(vec![self.render_paragraph(node)?]),
-            NodeValue::List(_list) => self.render_nodes(node.children()),
-            NodeValue::Item(_item) => Ok(vec![self.render_bulleted_list_item(node)?]),
+            NodeValue::List(list) => match list.list_type {
+                ListType::Bullet => self.render_bullet_list(node),
+                ListType::Ordered => self.render_numbered_list(node),
+            },
             _ => Ok(Vec::new()),
         }
+    }
+
+    fn render_bullet_list(&mut self, node: &'a AstNode<'a>) -> Result<Vec<Block>> {
+        let mut items = Vec::new();
+        for child in node.children() {
+            let block = self.render_bulleted_list_item(child)?;
+            items.push(block);
+        }
+        Ok(items)
+    }
+
+    fn render_numbered_list(&mut self, node: &'a AstNode<'a>) -> Result<Vec<Block>> {
+        let mut items = Vec::new();
+        for child in node.children() {
+            let block = self.render_numbered_list_item(child)?;
+            items.push(block);
+        }
+        Ok(items)
+    }
+
+    fn render_numbered_list_item(&mut self, node: &'a AstNode<'a>) -> Result<Block> {
+        let mut rich_text = Vec::new();
+
+        if let Some(paragraph) = node
+            .children()
+            .find(|child| matches!(child.data.borrow().value, NodeValue::Paragraph))
+        {
+            rich_text = self.render_rich_text(paragraph)?;
+        }
+
+        let value = NumberedListItemValue {
+            rich_text,
+            color: notion_client::objects::block::TextColor::Default,
+            children: None,
+        };
+
+        Ok(Block {
+            block_type: BlockType::NumberedListItem {
+                numbered_list_item: value,
+            },
+            ..Default::default()
+        })
     }
 
     fn render_bulleted_list_item(&mut self, node: &'a AstNode<'a>) -> Result<Block> {

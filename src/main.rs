@@ -24,10 +24,18 @@ use crate::clients::gemini_client::GeminiClient;
 use crate::clients::ollama_client::OllamaClient;
 use crate::clients::openai_client::OpenAIClient;
 use crate::config::OpenAIConfig;
+use crate::notion::converter::Converter;
 use std::path::Path;
 use ui::{ascii_art, print_clean_config};
 
 use crate::config::get_config_path;
+
+fn test_parser() {
+    let markdown = "# Bullet list\n\n- Item 1\n- Item 2\n\n## Numbered List\n\n1. First item\n2. Second item\n\n## Heading 2\n\nSome text here.";
+    let arena = comrak::Arena::new();
+    let parsed = Converter::run(markdown, &arena);
+    println!("{:#?}", parsed.unwrap());
+}
 
 async fn process_and_save_file(
     file_path: &str,
@@ -482,8 +490,9 @@ async fn run() -> Result<(), NotedError> {
 }
 #[tokio::main]
 async fn main() {
-    if let Err(e) = run().await {
-        eprintln!("{} {}", "✖".red(), e.to_string().red());
-        std::process::exit(1);
-    }
+    test_parser();
+    // if let Err(e) = run().await {
+    //     eprintln!("{} {}", "✖".red(), e.to_string().red());
+    //     std::process::exit(1);
+    // }
 }
