@@ -12,6 +12,7 @@ use clap::Parser;
 use cli::{Cli, Commands};
 use colored::*;
 use config::{ClaudeConfig, Config, GeminiConfig, OllamaConfig};
+use dialoguer::Confirm;
 use dialoguer::Input;
 use dialoguer::Select;
 use dialoguer::{Password, theme::ColorfulTheme};
@@ -23,6 +24,7 @@ use crate::clients::claude_client::ClaudeClient;
 use crate::clients::gemini_client::GeminiClient;
 use crate::clients::ollama_client::OllamaClient;
 use crate::clients::openai_client::OpenAIClient;
+use crate::config::NotionConfig;
 use crate::config::OpenAIConfig;
 use std::path::Path;
 use ui::{ascii_art, print_clean_config};
@@ -267,6 +269,29 @@ async fn run() -> Result<(), NotedError> {
                         println!("{}", "Config saved successfully.".green());
                     }
                     _ => unreachable!(),
+                }
+
+                // notion
+                let is_notion = Confirm::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Do you want to configure Notion to save your notes there?")
+                    .default(false)
+                    .interact()?;
+
+                if is_notion {
+                    let api_key = Password::with_theme(&ColorfulTheme::default())
+                        .with_prompt("Enter your Notion API key: ")
+                        .interact()?;
+                    let database_id = Input::with_theme(&ColorfulTheme::default())
+                        .with_prompt("Enter your Notion Database ID: ")
+                        .default("".to_string())
+                        .interact()?;
+
+                    let mut config = Config::load()?;
+                    config.notion = Some(NotionConfig {
+                        api_key,
+                        database_id,
+                    });
+                    config.save()?;
                 }
                 println!(
                     "{}",

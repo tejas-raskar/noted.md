@@ -76,4 +76,16 @@ pub fn print_clean_config(config: Config) {
     } else {
         println!("  (Not Configured)");
     }
+
+    println!("{}", "Notion".bold());
+    if let Some(notion_config) = config.notion {
+        let api_key = format!(
+            "{:.3}***************** (hidden for security)",
+            notion_config.api_key
+        );
+        println!("  API Key: {}", api_key);
+        println!("  Database ID: {}", notion_config.database_id);
+    } else {
+        println!("  (Not Configured)");
+    }
 }
