@@ -10,6 +10,13 @@ pub struct Config {
     pub ollama: Option<OllamaConfig>,
     pub claude: Option<ClaudeConfig>,
     pub openai: Option<OpenAIConfig>,
+    pub notion: Option<NotionConfig>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct NotionConfig {
+    pub api_key: String,
+    pub database_id: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
