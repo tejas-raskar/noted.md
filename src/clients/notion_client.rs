@@ -124,12 +124,17 @@ impl NotionClient {
         let status = response.status();
         let response_body = response.text().await?;
 
-        if status == StatusCode::OK {
+        if status.is_success() {
             let notion_reponse: NotionResponse = serde_json::from_str(&response_body)
                 .map_err(|e| NotedError::ResponseDecodeError(e.to_string()))?;
             Ok(notion_reponse)
         } else {
-            Err(NotedError::ApiError("error".to_string()))
+            let error_response: NotionError = serde_json::from_str(&response_body)
+                .map_err(|e| NotedError::ResponseDecodeError(e.to_string()))?;
+            Err(NotedError::ApiError(format!(
+                "Notion API Error ({}): {}",
+                status, error_response.message
+            )))
         }
     }
 }

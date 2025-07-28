@@ -41,6 +41,9 @@ pub enum NotedError {
     #[error(" Claude is not configured properly. Please run 'notedmd config --edit' to set it up.")]
     ClaudeNotConfigured,
 
+    #[error(" Notion is not configured properly. Please run 'notedmd config --edit' to set it up.")]
+    NotionNotConfigured,
+
     #[error(
         " OpenAI/LM Studio is not configured properly. Please run 'notedmd config --edit' to set it up."
     )]

@@ -30,9 +30,13 @@ pub enum Commands {
         #[arg(long, env = "GEMINI_API_KEY", hide_env_values = true)]
         api_key: Option<String>,
 
-        // Prompt the LLM
+        /// Prompt the LLM
         #[arg(short, long, help = "Add a custom prompt to pass to the LLM")]
         prompt: Option<String>,
+
+        /// Notion Support
+        #[arg(short, long, help = "Use Notion to store the generated output")]
+        notion: bool,
     },
 
     /// Configure notedmd settings
@@ -45,7 +49,7 @@ pub enum Commands {
         #[arg(long, help = "Set your Claude API key for future use")]
         set_claude_api_key: Option<String>,
 
-        // Set active provider
+        /// Set active provider
         #[arg(long, help = "Set the active provider")]
         set_provider: Option<String>,
 
@@ -53,11 +57,11 @@ pub enum Commands {
         #[arg(long, help = "Shows the location of your configuration file")]
         show_path: bool,
 
-        // Show config file
+        /// Show config file
         #[arg(long, help = "Shows the content of your configuration")]
         show: bool,
 
-        // Trigger onboarding flow
+        /// Trigger onboarding flow
         #[arg(long, help = "Edit the configuration file")]
         edit: bool,
     },

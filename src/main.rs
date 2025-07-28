@@ -22,6 +22,7 @@ use indicatif::ProgressStyle;
 
 use crate::clients::claude_client::ClaudeClient;
 use crate::clients::gemini_client::GeminiClient;
+use crate::clients::notion_client::NotionClient;
 use crate::clients::ollama_client::OllamaClient;
 use crate::clients::openai_client::OpenAIClient;
 use crate::config::NotionConfig;
@@ -36,6 +37,7 @@ async fn process_and_save_file(
     client: &dyn AiProvider,
     output_dir: Option<&str>,
     progress_bar: &ProgressBar,
+    notion_client: Option<&NotionClient>,
 ) -> Result<(), NotedError> {
     let path = Path::new(file_path);
     let file_name = match path.file_name() {
@@ -77,13 +79,30 @@ async fn process_and_save_file(
         None => path.with_extension("md").to_string_lossy().into_owned(),
     };
 
-    match std::fs::write(&output_path, markdown) {
+    match std::fs::write(&output_path, &markdown) {
         Ok(_) => {
             progress_bar.println(format!(
                 "{} {}",
                 "✔".green(),
                 format!("Markdown saved to '{}'", output_path.cyan()).green()
             ));
+            if let Some(client) = notion_client {
+                match client
+                    .create_notion_page(file_name.to_str().unwrap(), "Testing", &markdown)
+                    .await
+                {
+                    Ok(page) => {
+                        progress_bar.println(format!(
+                            "{} {}",
+                            "✔".green(),
+                            format!("Notion page created at '{}'", page.url.cyan()).green()
+                        ));
+                    }
+                    Err(e) => {
+                        return Err(e);
+                    }
+                }
+            };
             Ok(())
         }
         Err(e) => {
@@ -356,6 +375,7 @@ async fn run() -> Result<(), NotedError> {
             output,
             api_key,
             prompt,
+            notion,
         } => {
             let config = Config::load()?;
             let client: Box<dyn AiProvider> = match config.active_provider.as_deref() {
@@ -427,6 +447,18 @@ async fn run() -> Result<(), NotedError> {
                     format!("Input path not found: {}", path),
                 )));
             }
+            let notion_client = if notion {
+                if let Some(notion_config) = &config.notion {
+                    Some(NotionClient::new(
+                        notion_config.api_key.clone(),
+                        notion_config.database_id.clone(),
+                    ))
+                } else {
+                    return Err(NotedError::NotionNotConfigured);
+                }
+            } else {
+                None
+            };
 
             if input_path.is_dir() {
                 let files_to_convert: Vec<_> = std::fs::read_dir(input_path)?
@@ -464,6 +496,7 @@ async fn run() -> Result<(), NotedError> {
                             client.as_ref(),
                             output.as_deref(),
                             &progress_bar,
+                            notion_client.as_ref(),
                         )
                         .await
                         {
@@ -492,6 +525,7 @@ async fn run() -> Result<(), NotedError> {
                     client.as_ref(),
                     output.as_deref(),
                     &progress_bar,
+                    notion_client.as_ref(),
                 )
                 .await
                 {
