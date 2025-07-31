@@ -1,6 +1,10 @@
+use std::collections::HashMap;
+
+use anyhow::Result;
+use colored::Colorize;
 use comrak::Arena;
 use notion_client::objects::block::Block;
-use reqwest::{Client, StatusCode};
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use crate::{error::NotedError, notion::converter};
@@ -60,6 +64,65 @@ pub struct NotionResponse {
 }
 
 #[derive(Deserialize, Debug)]
+pub struct NotionDatabase {
+    pub properties: HashMap<String, DatabaseProperty>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct DatabaseProperty {
+    pub id: String,
+    pub name: String,
+    #[serde(flatten)]
+    pub type_specific_config: PropertyType,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub enum PropertyType {
+    Title(EmptyStruct),
+    RichText(EmptyStruct),
+    Number(NumberStruct),
+    Select { select: SelectStruct },
+    MultiSelect { multi_select: SelectStruct },
+    Date(EmptyStruct),
+    Checkbox(EmptyStruct),
+    People(EmptyStruct),
+    Files(EmptyStruct),
+    Url(EmptyStruct),
+    Email(EmptyStruct),
+    CreatedTime(EmptyStruct),
+    CreatedBy(EmptyStruct),
+    LastEditedTime(EmptyStruct),
+    LastEditedBy(EmptyStruct),
+}
+
+#[derive(Deserialize, Debug)]
+pub struct SelectStruct {
+    pub options: Vec<DatabaseSelectOption>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct DatabaseSelectOption {
+    pub id: String,
+    pub name: String,
+    pub color: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct NumberStruct {
+    pub number: NumberFormat,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct NumberFormat {
+    pub format: String,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct EmptyStruct {}
+
+#[derive(Deserialize, Debug)]
 pub struct NotionError {
     pub message: String,
 }
@@ -77,6 +140,33 @@ impl NotionClient {
             client: Client::new(),
             api_key,
             database_id,
+        }
+    }
+
+    pub async fn get_database_schema(&self) -> Result<NotionDatabase, NotedError> {
+        let url = format!("https://api.notion.com/v1/databases/{}", self.database_id);
+        let response = self
+            .client
+            .get(url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Notion-Version", "2022-06-28")
+            .send()
+            .await?;
+
+        let status = response.status();
+        let response_body = response.text().await?;
+        if status.is_success() {
+            let notion_database: NotionDatabase = serde_json::from_str(&response_body)
+                .map_err(|e| NotedError::ResponseDecodeError(e.to_string()))?;
+            Ok(notion_database)
+        } else {
+            let error_response: NotionError = serde_json::from_str(&response_body)
+                .map_err(|e| NotedError::ResponseDecodeError(e.to_string()))?;
+            Err(NotedError::ApiError(format!(
+                "Notion API Error ({}): {}",
+                status,
+                error_response.message.red()
+            )))
         }
     }
 
