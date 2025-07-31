@@ -40,6 +40,7 @@ async fn process_and_save_file(
     output_dir: Option<&str>,
     progress_bar: &ProgressBar,
     notion_client: Option<&NotionClient>,
+    notion_config: Option<&NotionConfig>,
 ) -> Result<(), NotedError> {
     let path = Path::new(file_path);
     let file_name = match path.file_name() {
@@ -88,9 +89,14 @@ async fn process_and_save_file(
                 "✔".green(),
                 format!("Markdown saved to '{}'", output_path.cyan()).green()
             ));
-            if let Some(client) = notion_client {
+            if let (Some(client), Some(config)) = (notion_client, notion_config) {
                 match client
-                    .create_notion_page(file_name.to_str().unwrap(), "Testing", &markdown)
+                    .create_notion_page(
+                        file_name.to_str().unwrap(),
+                        &config.title_property_name,
+                        &config.properties,
+                        &markdown,
+                    )
                     .await
                 {
                     Ok(page) => {
@@ -319,6 +325,20 @@ async fn run() -> Result<(), NotedError> {
                     spinner.finish_and_clear();
                     match schema_result {
                         Ok(schema) => {
+                            let title_property_name = schema
+                                .properties
+                                .values()
+                                .find(|prop| {
+                                    matches!(prop.type_specific_config, PropertyType::Title(_))
+                                })
+                                .map(|prop| prop.name.clone())
+                                .ok_or_else(|| {
+                                    NotedError::ApiError(format!(
+                                        "{}",
+                                        "Database has no title property".red()
+                                    ))
+                                })?;
+
                             let properties: Vec<_> = schema
                                 .properties
                                 .into_iter()
@@ -464,6 +484,7 @@ async fn run() -> Result<(), NotedError> {
                             config.notion = Some(NotionConfig {
                                 api_key,
                                 database_id,
+                                title_property_name,
                                 properties: default_properties,
                             });
                             config.save()?;
@@ -606,17 +627,16 @@ async fn run() -> Result<(), NotedError> {
                     format!("Input path not found: {}", path),
                 )));
             }
-            let notion_client = if notion {
-                if let Some(notion_config) = &config.notion {
-                    Some(NotionClient::new(
-                        notion_config.api_key.clone(),
-                        notion_config.database_id.clone(),
-                    ))
+            let (notion_client, notion_config) = if notion {
+                if let Some(config) = &config.notion {
+                    let client =
+                        NotionClient::new(config.api_key.clone(), config.database_id.clone());
+                    (Some(client), Some(config))
                 } else {
                     return Err(NotedError::NotionNotConfigured);
                 }
             } else {
-                None
+                (None, None)
             };
 
             if input_path.is_dir() {
@@ -656,6 +676,7 @@ async fn run() -> Result<(), NotedError> {
                             output.as_deref(),
                             &progress_bar,
                             notion_client.as_ref(),
+                            notion_config,
                         )
                         .await
                         {
@@ -685,6 +706,7 @@ async fn run() -> Result<(), NotedError> {
                     output.as_deref(),
                     &progress_bar,
                     notion_client.as_ref(),
+                    notion_config,
                 )
                 .await
                 {

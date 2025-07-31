@@ -18,6 +18,8 @@ pub struct NotionConfig {
     pub api_key: String,
     pub database_id: String,
     #[serde(default)]
+    pub title_property_name: String,
+    #[serde(default)]
     pub properties: Vec<NotionPropertyConfig>,
 }
 
