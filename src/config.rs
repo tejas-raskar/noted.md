@@ -10,6 +10,24 @@ pub struct Config {
     pub ollama: Option<OllamaConfig>,
     pub claude: Option<ClaudeConfig>,
     pub openai: Option<OpenAIConfig>,
+    pub notion: Option<NotionConfig>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct NotionConfig {
+    pub api_key: String,
+    pub database_id: String,
+    #[serde(default)]
+    pub title_property_name: String,
+    #[serde(default)]
+    pub properties: Vec<NotionPropertyConfig>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+pub struct NotionPropertyConfig {
+    pub name: String,
+    pub property_type: String,
+    pub default_value: serde_json::Value,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]

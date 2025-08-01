@@ -102,6 +102,23 @@ Make sure Ollama is installed and running on your local machine. You can downloa
 #### OpenAI API compatible clients
 Supports all clients that are compatible with the OpenAI API. [LM Studio](https://lmstudio.ai/) for example.
 
+#### Notion
+You can also save your converted notes directly to a Notion database. To do this, you'll need to create a Notion integration and provide the API key and database ID.
+
+**1. Create a Notion Integration:**
+Follow the [official Notion guide](https://developers.notion.com/docs/create-a-notion-integration#create-your-integration-in-notion) to create an integration and get your API key (Internal Integration Token).
+
+**2. Share the Database with the Integration:**
+For `noted.md` to be able to add pages to your database, you need to share it with the integration you created.
+- Go to your database in Notion.
+- Click the **•••** menu in the top-right corner.
+- Click **+ Add connections** and select your integration.
+
+**3. Get the Database ID:**
+The database ID is the long string of characters in the URL of your database. For example, if your database URL is `https://www.notion.so/my-workspace/1234567890abcdef1234567890abcdef?v=...`, your database ID is `1234567890abcdef1234567890abcdef`.
+
+You will be prompted to enter the API key and database ID when you run `notedmd config --edit` and choose to configure Notion.
+
 ### Managing Configuration via Flags
 
 You can also manage your configuration directly using flags.
@@ -136,6 +153,7 @@ Once configured, you can convert your handwritten notes.
 | `-o`, `--output <dir>`           | Specify a directory to save the converted Markdown file(s).                 |
 | `-p`, `--prompt <prompt>`        | Add a custom prompt to override the default instructions for the LLM.       |
 | `--api-key <key>`                | Temporarily override the stored API key for a single `convert` command.     |
+| `-n`, `--notion`                 | Save the converted file to your configured Notion database.                 |
 
 **Examples:**
 
@@ -143,6 +161,11 @@ Once configured, you can convert your handwritten notes.
     The converted file will be saved in the same directory with a `.md` extension (e.g., `my_document.md`).
     ```bash
     notedmd convert my_document.pdf
+    ```
+
+-   **Convert a file and save it to Notion**:
+    ```bash
+    notedmd convert my_notes.png --notion
     ```
 
 -   **Convert a file with a custom prompt**:

@@ -69,10 +69,30 @@ pub fn print_clean_config(config: Config) {
         let api_key = if openai_config.api_key.is_none() {
             "API key empty.".to_string()
         } else {
-            openai_config.api_key.unwrap()
+            format!(
+                "{:.3}***************** (hidden for security)",
+                openai_config.api_key.unwrap()
+            )
         };
 
         println!("  API Key: {}", api_key);
+    } else {
+        println!("  (Not Configured)");
+    }
+
+    println!("{}", "Notion".bold());
+    if let Some(notion_config) = config.notion {
+        let api_key = format!(
+            "{:.3}***************** (hidden for security)",
+            notion_config.api_key
+        );
+        println!("  API Key: {}", api_key);
+        println!("  Database ID: {}", notion_config.database_id);
+        println!(
+            "  Title Property Name: {}",
+            notion_config.title_property_name
+        );
+        println!("  Database Properties: {:#?}", notion_config.properties);
     } else {
         println!("  (Not Configured)");
     }

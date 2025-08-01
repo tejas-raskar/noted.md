@@ -4,6 +4,7 @@ mod clients;
 mod config;
 mod error;
 mod file_utils;
+mod notion;
 mod ui;
 
 use ai_provider::AiProvider;
@@ -11,7 +12,9 @@ use clap::Parser;
 use cli::{Cli, Commands};
 use colored::*;
 use config::{ClaudeConfig, Config, GeminiConfig, OllamaConfig};
+use dialoguer::Confirm;
 use dialoguer::Input;
+use dialoguer::MultiSelect;
 use dialoguer::Select;
 use dialoguer::{Password, theme::ColorfulTheme};
 use error::NotedError;
@@ -20,8 +23,11 @@ use indicatif::ProgressStyle;
 
 use crate::clients::claude_client::ClaudeClient;
 use crate::clients::gemini_client::GeminiClient;
+use crate::clients::notion_client::NotionClient;
+use crate::clients::notion_client::PropertyType;
 use crate::clients::ollama_client::OllamaClient;
 use crate::clients::openai_client::OpenAIClient;
+use crate::config::NotionConfig;
 use crate::config::OpenAIConfig;
 use std::path::Path;
 use ui::{ascii_art, print_clean_config};
@@ -33,6 +39,8 @@ async fn process_and_save_file(
     client: &dyn AiProvider,
     output_dir: Option<&str>,
     progress_bar: &ProgressBar,
+    notion_client: Option<&NotionClient>,
+    notion_config: Option<&NotionConfig>,
 ) -> Result<(), NotedError> {
     let path = Path::new(file_path);
     let file_name = match path.file_name() {
@@ -74,13 +82,35 @@ async fn process_and_save_file(
         None => path.with_extension("md").to_string_lossy().into_owned(),
     };
 
-    match std::fs::write(&output_path, markdown) {
+    match std::fs::write(&output_path, &markdown) {
         Ok(_) => {
             progress_bar.println(format!(
                 "{} {}",
                 "✔".green(),
                 format!("Markdown saved to '{}'", output_path.cyan()).green()
             ));
+            if let (Some(client), Some(config)) = (notion_client, notion_config) {
+                match client
+                    .create_notion_page(
+                        file_name.to_string_lossy().into_owned().as_str(),
+                        &config.title_property_name,
+                        &config.properties,
+                        &markdown,
+                    )
+                    .await
+                {
+                    Ok(page) => {
+                        progress_bar.println(format!(
+                            "{} {}",
+                            "✔".green(),
+                            format!("Notion page created at '{}'", page.url.cyan()).green()
+                        ));
+                    }
+                    Err(e) => {
+                        return Err(e);
+                    }
+                }
+            };
             Ok(())
         }
         Err(e) => {
@@ -267,6 +297,201 @@ async fn run() -> Result<(), NotedError> {
                     }
                     _ => unreachable!(),
                 }
+
+                // notion
+                let is_notion = Confirm::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Do you want to configure Notion to save your notes there?")
+                    .interact()?;
+
+                if is_notion {
+                    let api_key = Password::with_theme(&ColorfulTheme::default())
+                        .with_prompt("Enter your Notion API key: ")
+                        .interact()?;
+                    let database_id = Password::with_theme(&ColorfulTheme::default())
+                        .with_prompt("Enter your Notion Database ID: ")
+                        .interact()?;
+
+                    let spinner = ProgressBar::new_spinner();
+                    spinner.set_style(
+                        ProgressStyle::default_spinner()
+                            .template("{spinner:.cyan} {msg}")
+                            .unwrap(),
+                    );
+                    spinner.set_message("Fetching Notion database schema...");
+                    spinner.enable_steady_tick(std::time::Duration::from_millis(100));
+
+                    let client = NotionClient::new(api_key.clone(), database_id.clone());
+                    let schema_result = client.get_database_schema().await;
+                    spinner.finish_and_clear();
+                    match schema_result {
+                        Ok(schema) => {
+                            let title_property_name = schema
+                                .properties
+                                .values()
+                                .find(|prop| {
+                                    matches!(prop.type_specific_config, PropertyType::Title(_))
+                                })
+                                .map(|prop| prop.name.clone())
+                                .ok_or_else(|| {
+                                    NotedError::ApiError(format!(
+                                        "{}",
+                                        "Database has no title property".red()
+                                    ))
+                                })?;
+
+                            let properties: Vec<_> = schema
+                                .properties
+                                .into_iter()
+                                .filter(|(_name, property)| match &property.type_specific_config {
+                                    PropertyType::Select { .. }
+                                    | PropertyType::MultiSelect { .. }
+                                    | PropertyType::RichText(_)
+                                    | PropertyType::Number(_)
+                                    | PropertyType::Date(_)
+                                    | PropertyType::Checkbox(_) => true,
+
+                                    _ => false,
+                                })
+                                .collect();
+
+                            let mut default_properties = Vec::new();
+                            if properties.is_empty() {
+                                println!(
+                                    "{}",
+                                    "No user configurable properties found in this database."
+                                        .yellow()
+                                );
+                            } else {
+                                println!("Enter the default values for the following properties: ");
+                            }
+                            for (name, property) in &properties {
+                                match &property.type_specific_config {
+                                    PropertyType::MultiSelect { multi_select } => {
+                                        let options: Vec<_> = multi_select
+                                            .options
+                                            .iter()
+                                            .map(|option| option.name.clone())
+                                            .collect();
+
+                                        let selections =
+                                            MultiSelect::with_theme(&ColorfulTheme::default())
+                                                .with_prompt(format!(
+                                                    "Select default options for '{}' (press Space to select and Enter to confirm)",
+                                                    name
+                                                ))
+                                                .items(&options)
+                                                .interact()?;
+                                        let selected_names: Vec<String> = selections
+                                            .iter()
+                                            .map(|&i| options[i].clone())
+                                            .collect();
+                                        let prop_config = config::NotionPropertyConfig {
+                                            name: name.clone(),
+                                            property_type: "multi_select".to_string(),
+                                            default_value: serde_json::json!(selected_names),
+                                        };
+                                        default_properties.push(prop_config);
+                                    }
+                                    PropertyType::Select { select } => {
+                                        let options: Vec<_> = select
+                                            .options
+                                            .iter()
+                                            .map(|option| option.name.clone())
+                                            .collect();
+                                        let selection = Select::with_theme(&ColorfulTheme::default())
+                                                .with_prompt(format!("Select default option for '{}' (Select and Enter to confirm)", name))
+                                                .items(&options)
+                                                .interact()?;
+                                        let selected_name = options[selection].clone();
+                                        let prop_config = config::NotionPropertyConfig {
+                                            name: name.clone(),
+                                            property_type: "select".to_string(),
+                                            default_value: serde_json::json!(selected_name),
+                                        };
+                                        default_properties.push(prop_config);
+                                    }
+                                    PropertyType::RichText(_) => {
+                                        let default_value: String =
+                                            Input::with_theme(&ColorfulTheme::default())
+                                                .with_prompt(format!("Default text for '{}'", name))
+                                                .interact_text()?;
+                                        let prop_config = config::NotionPropertyConfig {
+                                            name: name.clone(),
+                                            property_type: "rich_text".to_string(),
+                                            default_value: serde_json::json!(default_value),
+                                        };
+                                        default_properties.push(prop_config);
+                                    }
+                                    PropertyType::Checkbox(_) => {
+                                        let checked =
+                                            Confirm::with_theme(&ColorfulTheme::default())
+                                                .with_prompt(format!(
+                                                    "Should '{}' be checked by default?",
+                                                    name
+                                                ))
+                                                .interact()?;
+                                        let prop_config = config::NotionPropertyConfig {
+                                            name: name.clone(),
+                                            property_type: "checkbox".to_string(),
+                                            default_value: serde_json::json!(checked),
+                                        };
+                                        default_properties.push(prop_config);
+                                    }
+
+                                    PropertyType::Date(_) => {
+                                        let default_value: String =
+                                            Input::with_theme(&ColorfulTheme::default())
+                                                .with_prompt(format!(
+                                                    "Default date for '{}' (YYYY-MM-DD)",
+                                                    name
+                                                ))
+                                                .interact_text()?;
+                                        let prop_config = config::NotionPropertyConfig {
+                                            name: name.clone(),
+                                            property_type: "date".to_string(),
+                                            default_value: serde_json::json!(default_value),
+                                        };
+                                        default_properties.push(prop_config);
+                                    }
+
+                                    PropertyType::Number(_) => {
+                                        let default_value: f64 =
+                                            Input::with_theme(&ColorfulTheme::default())
+                                                .with_prompt(format!(
+                                                    "Default number for '{}'",
+                                                    name
+                                                ))
+                                                .interact()?;
+                                        let prop_config = config::NotionPropertyConfig {
+                                            name: name.clone(),
+                                            property_type: "number".to_string(),
+                                            default_value: serde_json::json!(default_value),
+                                        };
+
+                                        default_properties.push(prop_config);
+                                    }
+                                    _ => {
+                                        println!(
+                                            "{} Property '{}' is not supported for default configuration.",
+                                            "✖".red(),
+                                            name
+                                        );
+                                    }
+                                }
+                            }
+
+                            let mut config = Config::load()?;
+                            config.notion = Some(NotionConfig {
+                                api_key,
+                                database_id,
+                                title_property_name,
+                                properties: default_properties,
+                            });
+                            config.save()?;
+                        }
+                        Err(e) => eprintln!("{}", e),
+                    }
+                }
                 println!(
                     "{}",
                     "You can now run 'notedmd convert <file>' to convert your files.".cyan()
@@ -330,6 +555,7 @@ async fn run() -> Result<(), NotedError> {
             output,
             api_key,
             prompt,
+            notion,
         } => {
             let config = Config::load()?;
             let client: Box<dyn AiProvider> = match config.active_provider.as_deref() {
@@ -401,6 +627,17 @@ async fn run() -> Result<(), NotedError> {
                     format!("Input path not found: {}", path),
                 )));
             }
+            let (notion_client, notion_config) = if notion {
+                if let Some(config) = &config.notion {
+                    let client =
+                        NotionClient::new(config.api_key.clone(), config.database_id.clone());
+                    (Some(client), Some(config))
+                } else {
+                    return Err(NotedError::NotionNotConfigured);
+                }
+            } else {
+                (None, None)
+            };
 
             if input_path.is_dir() {
                 let files_to_convert: Vec<_> = std::fs::read_dir(input_path)?
@@ -438,6 +675,8 @@ async fn run() -> Result<(), NotedError> {
                             client.as_ref(),
                             output.as_deref(),
                             &progress_bar,
+                            notion_client.as_ref(),
+                            notion_config,
                         )
                         .await
                         {
@@ -466,6 +705,8 @@ async fn run() -> Result<(), NotedError> {
                     client.as_ref(),
                     output.as_deref(),
                     &progress_bar,
+                    notion_client.as_ref(),
+                    notion_config,
                 )
                 .await
                 {
@@ -479,7 +720,6 @@ async fn run() -> Result<(), NotedError> {
     }
     Ok(())
 }
-
 #[tokio::main]
 async fn main() {
     if let Err(e) = run().await {
