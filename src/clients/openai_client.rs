@@ -86,37 +86,41 @@ impl OpenAIClient {
 
 #[async_trait]
 impl AiProvider for OpenAIClient {
-    async fn send_request(&self, file_data: FileData) -> Result<String, NotedError> {
+    async fn send_request(&self, files_data: Vec<FileData>) -> Result<String, NotedError> {
         let url = format!("{}/v1/chat/completions", self.url);
-        let prompt = if let Some(custom_prompt) = &self.prompt {
+        let prompt_text = if let Some(custom_prompt) = &self.prompt {
             custom_prompt.clone()
         } else {
             "The user has provided an image of handwritten notes. Your task is to accurately transcribe these notes into a well-structured Markdown file. Preserve the original hierarchy, including headings and lists. Use LaTeX for any mathematical equations that appear in the notes. The output should only be the markdown content.".to_string()
         };
-        let image_url = format!(
-            "data:{};base64,{}",
-            file_data.mime_type, file_data.encoded_data
-        );
+
+        let mut content_parts: Vec<Content> = Vec::new();
+
+        content_parts.push(Content {
+                        content_type: "text".to_string(),
+            text: Some(prompt_text),
+                        image_url: None,
+        });
+
+        for file_data in files_data {
+            let image_url = format!(
+                "data:{};base64,{}",
+                file_data.mime_type, file_data.encoded_data
+            );
+            content_parts.push(Content {
+                        content_type: "image_url".to_string(),
+                        text: None,
+                        image_url: Some(Image { url: image_url }),
+            });
+        }
 
         let request_body = OpenAIRequest {
             model: self.model.clone(),
             messages: vec![Message {
                 role: "user".to_string(),
-                content: vec![
-                    Content {
-                        content_type: "text".to_string(),
-                        text: Some(prompt),
-                        image_url: None,
-                    },
-                    Content {
-                        content_type: "image_url".to_string(),
-                        text: None,
-                        image_url: Some(Image { url: image_url }),
-                    },
-                ],
-            }],
+                content: content_parts,
+                    }],
         };
-
         let mut request = self.client.post(&url);
 
         if let Some(api_key) = &self.api_key {

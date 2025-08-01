@@ -81,9 +81,9 @@ impl GeminiClient {
 
 #[async_trait]
 impl AiProvider for GeminiClient {
-    async fn send_request(&self, file_data: FileData) -> Result<String, NotedError> {
+    async fn send_request(&self, files_data: Vec<FileData>) -> Result<String, NotedError> {
         let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={}",
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={}", // Use gemini-pro-vision for multi-modal
             self.api_key
         );
 
@@ -93,30 +93,37 @@ impl AiProvider for GeminiClient {
             "Take these texts from this image and convert them into a clean, well-structured Markdown file, with NO EXCLUDED TEXT LEFT BEHIND. Pay attention to headings, lists, formulas, math expressions, and any other formatting. Resemble the hierarchy. Use latex for mathematical equations, in which For latex use the $$ syntax instead of \"```latex\". Do not skip anything from the original text/book. Return the desired output as the response, do not include other texts/formulas in the response apart from the picture's containings. No explanation on how the changes were made is needed".to_string()
         };
 
-        let request_body = GeminiRequest {
-            contents: vec![Content {
-                parts: vec![
-                    Part {
+        let mut parts: Vec<Part> = Vec::new();
+
+        // Add the initial text prompt part
+        parts.push(Part {
                         text: Some(prompt),
                         inline_data: None,
-                    },
-                    Part {
+        });
+
+        // Add all image data parts from the vector
+        for file_data in files_data {
+            parts.push(Part {
                         text: None,
                         inline_data: Some(InlineData {
                             mime_type: file_data.mime_type,
                             data: file_data.encoded_data,
                         }),
-                    },
-                ],
+            });
+        }
+
+        let request_body = GeminiRequest {
+            contents: vec![Content {
+                parts, // Use the collected parts
             }],
         };
-
         let response = self.client.post(&url).json(&request_body).send().await?;
 
         let status = response.status();
         let response_body = response.text().await?;
 
         if status != StatusCode::OK {
+            // ... existing error handling ...
             if status == StatusCode::UNAUTHORIZED {
                 return Err(NotedError::InvalidApiKey);
             }

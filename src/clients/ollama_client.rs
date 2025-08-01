@@ -42,7 +42,7 @@ impl OllamaClient {
 
 #[async_trait]
 impl AiProvider for OllamaClient {
-    async fn send_request(&self, file_data: FileData) -> Result<String, NotedError> {
+    async fn send_request(&self, files_data: Vec<FileData>) -> Result<String, NotedError> {
         let url = format!("{}/api/generate", self.url);
         let prompt = if let Some(custom_prompt) = &self.prompt {
             custom_prompt.clone()
@@ -50,10 +50,12 @@ impl AiProvider for OllamaClient {
             "The user has provided an image of handwritten notes. Your task is to accurately transcribe these notes into a well-structured Markdown file. Preserve the original hierarchy, including headings and lists. Use LaTeX for any mathematical equations that appear in the notes. The output should only be the markdown content.".to_string()
         };
 
+        let images: Vec<String> = files_data.into_iter().map(|fd| fd.encoded_data).collect();
+
         let request_body = OllamaRequest {
             model: self.model.clone(),
             prompt,
-            images: vec![file_data.encoded_data],
+            images,
             stream: false,
         };
 

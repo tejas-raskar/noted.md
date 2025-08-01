@@ -78,36 +78,41 @@ impl ClaudeClient {
 
 #[async_trait]
 impl AiProvider for ClaudeClient {
-    async fn send_request(&self, file_data: FileData) -> Result<String, NotedError> {
+    async fn send_request(&self, files_data: Vec<FileData>) -> Result<String, NotedError> {
         let url = "https://api.anthropic.com/v1/messages".to_string();
 
-        let prompt = if let Some(custom_prompt) = &self.prompt {
+        let prompt_text = if let Some(custom_prompt) = &self.prompt {
             custom_prompt.clone()
         } else {
             "Take the handwritten notes from this image and convert them into a clean, well-structured Markdown file. Pay attention to headings, lists, and any other formatting. Resemble the hierarchy. Use latex for mathematical equations. For latex use the $$ syntax instead of ```latex. Do not skip anything from the original text. The output should be suitable for use in Obsidian. Just give me the markdown, do not include other text in the response apart from the markdown file. No explanation on how the changes were made is needed".to_string()
         };
+
+        let mut content_parts: Vec<Content> = Vec::new();
+
+        content_parts.push(Content {
+                        content_type: "text".to_string(),
+            text: Some(prompt_text),
+                        source: None,
+        });
+
+        for file_data in files_data {
+            content_parts.push(Content {
+                content_type: "image".to_string(),
+                text: None,
+                source: Some(Source {
+                    source_type: "base64".to_string(),
+                    media_type: file_data.mime_type,
+                    data: file_data.encoded_data,
+                }),
+            });
+        }
 
         let request_body = ClaudeRequest {
             model: self.model.clone(),
             max_tokens: 4096,
             messages: vec![Message {
                 role: "user".to_string(),
-                content: vec![
-                    Content {
-                        content_type: "image".to_string(),
-                        text: None,
-                        source: Some(Source {
-                            source_type: "base64".to_string(),
-                            media_type: file_data.mime_type,
-                            data: file_data.encoded_data,
-                        }),
-                    },
-                    Content {
-                        content_type: "text".to_string(),
-                        text: Some(prompt),
-                        source: None,
-                    },
-                ],
+                content: content_parts,
             }],
         };
 

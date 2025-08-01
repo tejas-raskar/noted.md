@@ -33,6 +33,11 @@ pub enum Commands {
         // Prompt the LLM
         #[arg(short, long, help = "Add a custom prompt to pass to the LLM")]
         prompt: Option<String>,
+
+        /// Number of pages to process at once (max 30)
+        #[arg(long, default_value = "1", help = "Number of pages to process at once (max 30)")]
+        pages_per_batch: u32,
+
     },
 
     /// Configure notedmd settings

@@ -34,6 +34,7 @@ async fn process_and_save_file(
     file_path: &str,
     client: &dyn AiProvider,
     output_dir: Option<&str>,
+    pages_per_batch: u32,
     progress_bar: &ProgressBar,
 ) -> Result<(), NotedError> {
     let path = Path::new(file_path);
@@ -83,27 +84,35 @@ async fn process_and_save_file(
             String::new()
         };
         
-        for page_num in progress..total_pages {
+        // Iterate through pages in batches
+        let mut current_page = progress;
+        while current_page < total_pages {
+            let batch_size = std::cmp::min(pages_per_batch, total_pages - current_page);
+            let mut batch_data: Vec<crate::file_utils::FileData> = Vec::new();
+
+            // Collect file data for the batch
+            for i in 0..batch_size {
+                let page_num = current_page + i;
             progress_bar.println(format!(
                 "{} {}",
                 "📄".blue(),
                 format!("Processing page {} of {}", page_num + 1, total_pages).blue()
             ));
-            
             let file_data = extract_page_as_image(&pdf, page_num)?;
+                batch_data.push(file_data);
+            }
             
-            progress_bar.set_message(format!("{}", "Sending to your AI model...".yellow()));
+            progress_bar.set_message(format!("{}", "Sending batch to your AI model...".yellow()));
 
-            // Get markdown for this page
-            let page_markdown = client.send_request(file_data).await?;
-            
+            // Send the entire batch to the AI model in one request
+            let page_markdown = client.send_request(batch_data).await?;
             // Add page separator if not the first content
             if !markdown_content.is_empty() {
                 markdown_content.push_str("\n\n---\n\n");
             }
             markdown_content.push_str(&page_markdown);
 
-            // Save progress after each page
+            // Save progress after each batch
             fs::write(&output_path, &markdown_content)?;
             progress_bar.println(format!(
                 "{} {}",
@@ -115,11 +124,13 @@ async fn process_and_save_file(
             tracker.update_progress(
                 file_path.to_string(),
                 ProcessingProgress {
-                    last_processed_page: page_num + 1,
+                    last_processed_page: current_page + batch_size,
                     total_pages,
                 },
             );
             tracker.save()?;
+
+            current_page += batch_size;
         }
 
         // Save final markdown
@@ -145,7 +156,7 @@ async fn process_and_save_file(
 
         progress_bar.set_message(format!("{}", "Sending to your AI model...".yellow()));
 
-        let markdown = client.send_request(file_data).await?;
+        let markdown = client.send_request(vec!(file_data)).await?;
         progress_bar.println(format!("{} {}", "✔".green(), "Received response.".green()));
 
         match std::fs::write(&output_path, markdown) {
@@ -406,6 +417,7 @@ async fn run() -> Result<(), NotedError> {
             output,
             api_key,
             prompt,
+            pages_per_batch,
         } => {
             let config = Config::load()?;
             let client: Box<dyn AiProvider> = match config.active_provider.as_deref() {
@@ -478,6 +490,13 @@ async fn run() -> Result<(), NotedError> {
                 )));
             }
 
+            if pages_per_batch > 30 {
+                return Err(NotedError::IoError(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "pages_per_batch cannot exceed 30",
+                )));
+            }
+
             if input_path.is_dir() {
                 let files_to_convert: Vec<_> = std::fs::read_dir(input_path)?
                     .filter_map(Result::ok)
@@ -513,15 +532,16 @@ async fn run() -> Result<(), NotedError> {
                             file_path_str,
                             client.as_ref(),
                             output.as_deref(),
+                            pages_per_batch,
                             &progress_bar,
                         )
                         .await
                         {
-                            progress_bar.println(format!("{}", e.to_string().red()));
-                        }
-                    }
-                    progress_bar.inc(1);
+                    progress_bar.println(format!("{}", e.to_string().red()));
                 }
+            }
+                    progress_bar.inc(1);
+        }
 
                 progress_bar
                     .finish_with_message(format!("{}", "Completed processing all files".green()));
@@ -541,6 +561,7 @@ async fn run() -> Result<(), NotedError> {
                     path_str,
                     client.as_ref(),
                     output.as_deref(),
+                    pages_per_batch,
                     &progress_bar,
                 )
                 .await
