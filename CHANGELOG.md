@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0]
+
+### Fixed
+- Resolved an issue where Claude API throwed an error when using PDF files due to wrong type in request body.
+
+### Added
+- Added support for Notion. You can now save your notes directly to a Notion database.
+
 ## [0.2.4]
 
 ### Added
