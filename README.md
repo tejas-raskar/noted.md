@@ -102,7 +102,9 @@ Make sure Ollama is installed and running on your local machine. You can downloa
 #### OpenAI API compatible clients
 Supports all clients that are compatible with the OpenAI API. [LM Studio](https://lmstudio.ai/) for example.
 
-#### Notion
+---
+
+### Notion
 You can also save your converted notes directly to a Notion database. To do this, you'll need to create a Notion integration and provide the API key and database ID.
 
 **1. Create a Notion Integration:**
@@ -118,6 +120,8 @@ For `noted.md` to be able to add pages to your database, you need to share it wi
 The database ID is the long string of characters in the URL of your database. For example, if your database URL is `https://www.notion.so/my-workspace/1234567890abcdef1234567890abcdef?v=...`, your database ID is `1234567890abcdef1234567890abcdef`.
 
 You will be prompted to enter the API key and database ID when you run `notedmd config --edit` and choose to configure Notion.
+
+---
 
 ### Managing Configuration via Flags
 
