@@ -25,7 +25,8 @@ pub struct Parent {
 // Response Struct
 #[derive(Deserialize, Debug)]
 pub struct NotionResponse {
-    pub id: String,
+    #[serde(rename = "id")]
+    pub _id: String,
     pub url: String,
 }
 
@@ -36,7 +37,8 @@ pub struct NotionDatabase {
 
 #[derive(Deserialize, Debug)]
 pub struct DatabaseProperty {
-    pub id: String,
+    #[serde(rename = "id")]
+    pub _id: String,
     pub name: String,
     #[serde(flatten)]
     pub type_specific_config: PropertyType,
@@ -48,7 +50,7 @@ pub struct DatabaseProperty {
 pub enum PropertyType {
     Title(EmptyStruct),
     RichText(EmptyStruct),
-    Number(NumberStruct),
+    Number(EmptyStruct),
     Select { select: SelectStruct },
     MultiSelect { multi_select: SelectStruct },
     Date(EmptyStruct),
@@ -61,6 +63,14 @@ pub enum PropertyType {
     CreatedBy(EmptyStruct),
     LastEditedTime(EmptyStruct),
     LastEditedBy(EmptyStruct),
+    Status { status: SelectStruct },
+    Formula(EmptyStruct),
+    Relation(EmptyStruct),
+    Rollup(EmptyStruct),
+    PhoneNumber(EmptyStruct),
+    Button(EmptyStruct),
+    UniqueId(EmptyStruct),
+    Verification(EmptyStruct),
 }
 
 #[derive(Deserialize, Debug)]
@@ -70,19 +80,21 @@ pub struct SelectStruct {
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct DatabaseSelectOption {
-    pub id: String,
+    #[serde(rename = "id")]
+    pub _id: String,
     pub name: String,
-    pub color: String,
+    #[serde(rename = "color")]
+    pub _color: String,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct NumberStruct {
-    pub number: NumberFormat,
+    pub _number: NumberFormat,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct NumberFormat {
-    pub format: String,
+    pub _format: String,
 }
 
 #[derive(Deserialize, Debug)]

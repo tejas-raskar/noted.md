@@ -13,7 +13,7 @@ use notion_client::objects::{
 };
 
 pub struct Converter<'a> {
-    arena: &'a Arena<AstNode<'a>>,
+    _arena: &'a Arena<AstNode<'a>>,
 }
 
 impl<'a> Converter<'a> {
@@ -21,7 +21,7 @@ impl<'a> Converter<'a> {
         let mut options = ComrakOptions::default();
         options.extension.math_dollars = true;
         let root = parse_document(arena, markdown, &options);
-        let mut converter = Self { arena };
+        let mut converter = Self { _arena: arena };
         let blocks = converter.render_nodes(root.children())?;
 
         Ok(blocks)

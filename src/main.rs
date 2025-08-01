@@ -92,7 +92,7 @@ async fn process_and_save_file(
             if let (Some(client), Some(config)) = (notion_client, notion_config) {
                 match client
                     .create_notion_page(
-                        file_name.to_str().unwrap(),
+                        file_name.to_string_lossy().into_owned().as_str(),
                         &config.title_property_name,
                         &config.properties,
                         &markdown,
@@ -399,7 +399,7 @@ async fn run() -> Result<(), NotedError> {
                                             .map(|option| option.name.clone())
                                             .collect();
                                         let selection = Select::with_theme(&ColorfulTheme::default())
-                                                .with_prompt(format!("Select default option for '{}' (press Space to  select and Enter to confirm)", name))
+                                                .with_prompt(format!("Select default option for '{}' (Select and Enter to confirm)", name))
                                                 .items(&options)
                                                 .interact()?;
                                         let selected_name = options[selection].clone();
