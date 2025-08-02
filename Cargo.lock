@@ -1409,7 +1409,7 @@ checksum = "0676bb32a98c1a483ce53e500a81ad9c3d5b3f7c920c28c24e9cb0980d0b5bc8"
 
 [[package]]
 name = "notedmd"
-version = "0.2.3"
+version = "0.3.0"
 dependencies = [
  "async-trait",
  "base64",

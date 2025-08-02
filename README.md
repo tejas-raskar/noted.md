@@ -15,14 +15,14 @@
 
 <p align="center">
   <a href="https://github.com/tejas-raskar/noted.md/actions"><img src="https://github.com/tejas-raskar/noted.md/actions/workflows/release.yml/badge.svg" alt="Build Status"></a>
-  <a href="http://github.com/tejas-raskar/noted.md/releases"><img src="https://img.shields.io/github/v/tag/tejas-raskar/noted.md" alt="Version"></a>
+  <a href="http://github.com/tejas-raskar/noted.md/releases"><img src="https://img.shields.io/github/v/tag/tejas-raskar/noted.md?color=green" alt="Version"></a>
   <a href="http://github.com/tejas-raskar/noted.md/releases"><img src="https://img.shields.io/github/downloads/tejas-raskar/noted.md/total?color=red" alt="Downloads"></a>
   <a href="https://github.com/tejas-raskar/noted.md/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
 </p>
 
 ---
 
-`noted.md` is a CLI tool that uses LLMs to convert your handwritten text into markdown files. It's an interactive program that accepts pdfs, jpg, jpeg, png as an input and processes them accordingly. It can recognize mathematical equations too and can correctly format them in LaTeX. And if you have bunch of files to convert them at once, `noted.md` supports batch processing too!
+`noted.md` is a CLI tool that uses LLMs to convert your handwritten text into markdown files. It's an interactive program that accepts pdfs, jpg, jpeg, png as an input and processes them accordingly. It can recognize mathematical equations too and can correctly format them in LaTeX. `noted.md` now supports processing **specific pages of a PDF** (e.g., "1,3-5,8"), efficiently handles **batches of pages in a single AI request**, and intelligently resumes interrupted conversions! And if you have a bunch of files to convert them at once, `noted.md` supports batch processing for directories too!
 
 
 https://github.com/user-attachments/assets/5e2f4ab5-2043-4ea4-b95d-bf63e36ce9d9
@@ -136,6 +136,8 @@ Once configured, you can convert your handwritten notes.
 | `-o`, `--output <dir>`           | Specify a directory to save the converted Markdown file(s).                 |
 | `-p`, `--prompt <prompt>`        | Add a custom prompt to override the default instructions for the LLM.       |
 | `--api-key <key>`                | Temporarily override the stored API key for a single `convert` command.     |
+| `--pages <ranges>`               | **For PDFs:** Specify specific pages or page ranges to convert (e.g., "1,3-5,8"). Can resume from last progress. |
+| `--pages-per-batch <num>`        | Number of pages to process at once (max 30). Default: 1.                    |
 
 **Examples:**
 
@@ -143,6 +145,11 @@ Once configured, you can convert your handwritten notes.
     The converted file will be saved in the same directory with a `.md` extension (e.g., `my_document.md`).
     ```bash
     notedmd convert my_document.pdf
+    ```
+
+-   **Convert specific pages of a PDF**:
+    ```bash
+    notedmd convert my_textbook.pdf --pages "1,5-7,10"
     ```
 
 -   **Convert a file with a custom prompt**:
