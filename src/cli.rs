@@ -38,6 +38,9 @@ pub enum Commands {
         #[arg(long, default_value = "1", help = "Number of pages to process at once (max 30)")]
         pages_per_batch: u32,
 
+        /// Specific pages or page ranges to convert (e.g., "1,3-5,8")
+        #[arg(long, help = "Specific pages or page ranges to convert (e.g., \"1,3-5,8\")")]
+        pages: Option<String>,
     },
 
     /// Configure notedmd settings

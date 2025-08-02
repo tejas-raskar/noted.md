@@ -24,17 +24,102 @@ use crate::clients::gemini_client::GeminiClient;
 use crate::clients::ollama_client::OllamaClient;
 use crate::clients::openai_client::OpenAIClient;
 use crate::config::OpenAIConfig;
-use std::{fs, path::Path};
+use std::{fs, path::Path, collections::BTreeSet};
 use ui::{ascii_art, print_clean_config};
 
 use crate::config::get_config_path;
 use crate::pdf_utils::{ProgressTracker, ProcessingProgress, process_pdf, extract_page_as_image};
+
+// Helper function to parse page ranges
+fn parse_page_ranges(
+    page_selection: &str,
+    total_pages: u32,
+) -> Result<Vec<u32>, NotedError> {
+    let mut pages = BTreeSet::new(); // Use BTreeSet for sorted unique pages
+
+    for part in page_selection.split(',') {
+        if part.contains('-') {
+            let mut range_parts = part.split('-');
+            let start = range_parts.next().ok_or_else(|| {
+                NotedError::IoError(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Malformed page range: {}", part),
+                ))
+            })?.trim().parse::<u32>().map_err(|_| {
+                NotedError::IoError(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Invalid start page in range: {}", part),
+                ))
+            })?;
+            let end = range_parts.next().ok_or_else(|| {
+                NotedError::IoError(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Malformed page range: {}", part),
+                ))
+            })?.trim().parse::<u32>().map_err(|_| {
+                NotedError::IoError(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Invalid end page in range: {}", part),
+                ))
+            })?;
+
+            if start == 0 || end == 0 {
+                return Err(NotedError::IoError(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Page numbers must be 1 or greater.".to_string(),
+                )));
+            }
+
+            if start > end {
+                return Err(NotedError::IoError(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Start page cannot be greater than end page in range: {}", part),
+                )));
+            }
+            
+            for page_num in start..=end {
+                if page_num > total_pages {
+                    return Err(NotedError::IoError(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("Page {} in range {} exceeds total pages ({}).", page_num, part, total_pages),
+                    )));
+                }
+                pages.insert(page_num - 1); // Convert to 0-indexed
+            }
+        } else {
+            let page_num = part.trim().parse::<u32>().map_err(|_| {
+                NotedError::IoError(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Invalid page number: {}", part),
+                ))
+            })?;
+
+            if page_num == 0 {
+                return Err(NotedError::IoError(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Page numbers must be 1 or greater.".to_string(),
+                )));
+            }
+
+            if page_num > total_pages {
+                return Err(NotedError::IoError(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Page {} exceeds total pages ({}).", page_num, total_pages),
+                )));
+            }
+            pages.insert(page_num - 1); // Convert to 0-indexed
+        }
+    }
+
+    Ok(pages.into_iter().collect()) // Convert BTreeSet to Vec
+}
 
 async fn process_and_save_file(
     file_path: &str,
     client: &dyn AiProvider,
     output_dir: Option<&str>,
     pages_per_batch: u32,
+    selected_pages_arg: Option<Vec<u32>>, // Renamed parameter to avoid conflict
     progress_bar: &ProgressBar,
 ) -> Result<(), NotedError> {
     let path = Path::new(file_path);
@@ -72,47 +157,88 @@ async fn process_and_save_file(
         // Process PDF file page by page
         let (pdf, total_pages) = process_pdf(file_path)?;
         
-        // Get progress and existing content if any
-        let progress = tracker.get_progress(file_path)
-            .map(|p| p.last_processed_page)
-            .unwrap_or(0);
+        // Determine which pages to process based on selected_pages_arg
+        let pages_to_process = if let Some(mut pages) = selected_pages_arg {
+            // If specific pages are selected, filter out already processed ones if resuming
+            let last_processed = tracker.get_progress(file_path)
+                .map(|p| p.last_processed_page)
+                .unwrap_or(0);
             
+            pages.retain(|&p_idx| p_idx >= last_processed);
+            
+            if pages.is_empty() && tracker.get_progress(file_path).is_some() {
+                 progress_bar.println(format!("{} {}", "ℹ️".cyan(), "All specified pages already processed. Skipping.".cyan()));
+                 tracker.mark_completed(file_path); // Mark as completed if all selected pages are done
+                 tracker.save()?;
+                 return Ok(());
+            }
+            pages.sort_unstable(); // Ensure pages are sorted for sequential processing
+            pages
+        } else {
+            // If no specific pages are selected, process all pages from current progress
+            let progress = tracker.get_progress(file_path)
+                .map(|p| p.last_processed_page)
+                .unwrap_or(0);
+            (progress..total_pages).collect()
+        };
+
+        if pages_to_process.is_empty() {
+            progress_bar.println(format!("{} {}", "ℹ️".cyan(), "No pages to process.".cyan()));
+            // If no pages to process, and it's not a full document completion, we should still ensure progress is saved if it was previously started.
+            if tracker.get_progress(file_path).is_some() {
+                tracker.mark_completed(file_path);
+                tracker.save()?;
+            }
+            return Ok(());
+        }
+
         // Read existing markdown content if it exists
-        let mut markdown_content = if progress > 0 && Path::new(&output_path).exists() {
+        // This is necessary because we might be appending to a partially converted file.
+        let mut markdown_content = if Path::new(&output_path).exists() {
             fs::read_to_string(&output_path)?
         } else {
             String::new()
         };
         
-        // Iterate through pages in batches
-        let mut current_page = progress;
-        while current_page < total_pages {
-            let batch_size = std::cmp::min(pages_per_batch, total_pages - current_page);
-            let mut batch_data: Vec<crate::file_utils::FileData> = Vec::new();
+        let mut processed_pages_count_in_session = 0;
+        let total_selected_pages_count = pages_to_process.len() as u32;
 
-            // Collect file data for the batch
-            for i in 0..batch_size {
-                let page_num = current_page + i;
-            progress_bar.println(format!(
-                "{} {}",
-                "📄".blue(),
-                format!("Processing page {} of {}", page_num + 1, total_pages).blue()
-            ));
-            let file_data = extract_page_as_image(&pdf, page_num)?;
-                batch_data.push(file_data);
+        // Iterate through pages in batches using the determined 'pages_to_process'
+        let mut pages_iter = pages_to_process.into_iter().peekable();
+        while let Some(&_current_0_indexed_page) = pages_iter.peek() {
+            let mut batch_data: Vec<crate::file_utils::FileData> = Vec::new();
+            let mut pages_in_current_batch: Vec<u32> = Vec::new(); // Store 0-indexed pages in this batch
+
+            for _i in 0..pages_per_batch {
+                if let Some(page_num_0_indexed) = pages_iter.next() {
+                    progress_bar.println(format!(
+                        "{} {}",
+                        "📄".blue(),
+                        format!("Processing page {} of {}", page_num_0_indexed + 1, total_pages).blue()
+                    ));
+                    let file_data = extract_page_as_image(&pdf, page_num_0_indexed)?;
+                    batch_data.push(file_data);
+                    pages_in_current_batch.push(page_num_0_indexed);
+                } else {
+                    break; // No more pages in selection or batch
+                }
             }
             
+            if batch_data.is_empty() {
+                break; // Should not happen given the outer loop condition, but as a safeguard
+            }
+
             progress_bar.set_message(format!("{}", "Sending batch to your AI model...".yellow()));
 
-            // Send the entire batch to the AI model in one request
             let page_markdown = client.send_request(batch_data).await?;
-            // Add page separator if not the first content
-            if !markdown_content.is_empty() {
+            
+            // Add page separator if there's existing content AND new content to add
+            if !markdown_content.is_empty() && !page_markdown.is_empty() {
                 markdown_content.push_str("\n\n---\n\n");
             }
             markdown_content.push_str(&page_markdown);
 
-            // Save progress after each batch
+            // Save content after each batch
             fs::write(&output_path, &markdown_content)?;
             progress_bar.println(format!(
                 "{} {}",
@@ -120,25 +246,30 @@ async fn process_and_save_file(
                 format!("Progress saved to '{}'", output_path.cyan()).green()
             ));
 
-            // Update progress
-            tracker.update_progress(
-                file_path.to_string(),
-                ProcessingProgress {
-                    last_processed_page: current_page + batch_size,
-                    total_pages,
-                },
-            );
+            // Update progress for the last page in the current batch
+            if let Some(&last_page_processed_0_indexed) = pages_in_current_batch.last() {
+                tracker.update_progress(
+                    file_path.to_string(),
+                    ProcessingProgress {
+                        last_processed_page: last_page_processed_0_indexed + 1, // Store 1-indexed for clarity
+                        total_pages,
+                    },
+                );
+            }
             tracker.save()?;
 
-            current_page += batch_size;
+            processed_pages_count_in_session += pages_in_current_batch.len() as u32;
         }
 
-        // Save final markdown
+        // Final save (might be redundant but ensures file is written fully)
         fs::write(&output_path, markdown_content)?;
         
-        // Mark as completed
-        tracker.mark_completed(file_path);
-        tracker.save()?;
+        // Mark as completed only if all *initially selected* pages were processed
+        // or if it was a full document conversion and it's truly finished.
+        if processed_pages_count_in_session == total_selected_pages_count {
+            tracker.mark_completed(file_path);
+            tracker.save()?;
+        }
 
         progress_bar.println(format!(
             "{} {}",
@@ -156,7 +287,7 @@ async fn process_and_save_file(
 
         progress_bar.set_message(format!("{}", "Sending to your AI model...".yellow()));
 
-        let markdown = client.send_request(vec!(file_data)).await?;
+        let markdown = client.send_request(vec![file_data]).await?;
         progress_bar.println(format!("{} {}", "✔".green(), "Received response.".green()));
 
         match std::fs::write(&output_path, markdown) {
@@ -361,7 +492,7 @@ async fn run() -> Result<(), NotedError> {
             }
 
             if let Some(ref new_provider) = set_provider {
-                if let Some(config_path) = get_config_path() {
+                if let Some(config_path) = config::get_config_path() {
                     if !config_path.exists() {
                         return Err(NotedError::ConfigNotFound);
                     }
@@ -402,7 +533,7 @@ async fn run() -> Result<(), NotedError> {
                 && set_claude_api_key.is_none()
                 && set_provider.is_none()
             {
-                if let Some(config_path) = get_config_path() {
+                if let Some(config_path) = config::get_config_path() {
                     if config_path.exists() {
                         let config = Config::load()?;
                         print_clean_config(config);
@@ -418,6 +549,7 @@ async fn run() -> Result<(), NotedError> {
             api_key,
             prompt,
             pages_per_batch,
+            pages, // Capture the new 'pages' argument
         } => {
             let config = Config::load()?;
             let client: Box<dyn AiProvider> = match config.active_provider.as_deref() {
@@ -528,18 +660,23 @@ async fn run() -> Result<(), NotedError> {
 
                 for file_path_buf in files_to_convert {
                     if let Some(file_path_str) = file_path_buf.to_str() {
+                        // For directory processing, pages argument is usually not applicable
+                        // or would apply to each PDF within the directory.
+                        // For simplicity, we'll assume it's only for single PDF processing.
+                        // If it were to apply here, you'd need to re-parse it for each PDF.
                         if let Err(e) = process_and_save_file(
                             file_path_str,
                             client.as_ref(),
                             output.as_deref(),
                             pages_per_batch,
+                            None, // No specific pages for batch directory processing
                             &progress_bar,
                         )
                         .await
                         {
-                    progress_bar.println(format!("{}", e.to_string().red()));
-                }
-            }
+                            progress_bar.println(format!("{}", e.to_string().red()));
+                        }
+                    }
                     progress_bar.inc(1);
         }
 
@@ -550,18 +687,35 @@ async fn run() -> Result<(), NotedError> {
                     NotedError::FileNameError(input_path.to_string_lossy().to_string())
                 })?;
                 file_utils::get_file_mime_type(path_str)?;
-                let progress_bar = ProgressBar::new(1);
+
+                // For single file, check if it's a PDF and if pages argument is provided
+                let selected_pages = if path_str.ends_with(".pdf") {
+                    if let Some(page_selection_str) = pages {
+                        // We need total pages to validate selection first
+                        let (pdf_dummy, total_pages) = process_pdf(path_str)?;
+                        drop(pdf_dummy); // Drop PDF as we only need total_pages here
+                        Some(parse_page_ranges(&page_selection_str, total_pages)?)
+                    } else {
+                        None
+                    }
+                } else {
+                    None // Pages argument is only for PDF files
+                };
+
+                let progress_bar = ProgressBar::new(1); // Set to 1 as it's a single file (or handled internally for PDF pages)
                 progress_bar.set_style(
                     ProgressStyle::default_bar()
                         .template("{bar:40.cyan/blue} {pos}/{len} {msg}")
                         .unwrap(),
                 );
                 progress_bar.set_message("Processing file...");
+
                 if let Err(e) = process_and_save_file(
                     path_str,
                     client.as_ref(),
                     output.as_deref(),
                     pages_per_batch,
+                    selected_pages, // Pass the parsed selected pages
                     &progress_bar,
                 )
                 .await
