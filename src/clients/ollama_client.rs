@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 
-use crate::{ai_provider::AiProvider, error::NotedError, file_utils::FileData};
+use crate::{ai_provider::AiProvider, error::NotedError, file_utils::FileData, examples::ExampleContext};
 
 // Request struct
 #[derive(Serialize)]
@@ -88,5 +88,10 @@ impl AiProvider for OllamaClient {
             .trim_end_matches("```");
 
         Ok(cleaned_markdown.to_string())
+    }
+
+    async fn send_request_with_examples(&self, file_data: FileData, _examples: &ExampleContext) -> Result<String, NotedError> {
+        // For now, just call the regular method - full implementation coming soon
+        self.send_request(file_data).await
     }
 }

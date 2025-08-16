@@ -1,6 +1,7 @@
 use crate::ai_provider::AiProvider;
 use crate::error::NotedError;
 use crate::file_utils::FileData;
+use crate::examples::ExampleContext;
 use async_trait::async_trait;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -152,5 +153,10 @@ impl AiProvider for GeminiClient {
             .trim_end_matches("```");
 
         Ok(cleaned_markdown.to_string())
+    }
+
+    async fn send_request_with_examples(&self, file_data: FileData, _examples: &ExampleContext) -> Result<String, NotedError> {
+        // For now, just call the regular method - full implementation coming soon
+        self.send_request(file_data).await
     }
 }
