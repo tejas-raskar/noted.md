@@ -11,6 +11,13 @@ pub struct Config {
     pub claude: Option<ClaudeConfig>,
     pub openai: Option<OpenAIConfig>,
     pub notion: Option<NotionConfig>,
+    pub examples: Option<ExamplesConfig>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ExamplesConfig {
+    pub database_path: String,
+    pub examples_dir: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -81,5 +88,37 @@ impl Config {
             fs::write(config_path, toml_string)?;
         }
         Ok(())
+    }
+
+    pub fn get_examples_config(&self) -> ExamplesConfig {
+        if let Some(examples_config) = &self.examples {
+            examples_config.clone()
+        } else {
+            self.default_examples_config()
+        }
+    }
+
+    fn default_examples_config(&self) -> ExamplesConfig {
+        if let Some(project_dirs) = ProjectDirs::from("com", "company", "notedmd") {
+            let data_dir = project_dirs.data_dir();
+            ExamplesConfig {
+                database_path: data_dir.join("examples.json").to_string_lossy().to_string(),
+                examples_dir: data_dir.join("examples").to_string_lossy().to_string(),
+            }
+        } else {
+            ExamplesConfig {
+                database_path: "examples.json".to_string(),
+                examples_dir: "examples".to_string(),
+            }
+        }
+    }
+}
+
+impl Clone for ExamplesConfig {
+    fn clone(&self) -> Self {
+        Self {
+            database_path: self.database_path.clone(),
+            examples_dir: self.examples_dir.clone(),
+        }
     }
 }

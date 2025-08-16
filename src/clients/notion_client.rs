@@ -63,7 +63,10 @@ pub enum PropertyType {
     CreatedBy(EmptyStruct),
     LastEditedTime(EmptyStruct),
     LastEditedBy(EmptyStruct),
-    Status { status: SelectStruct },
+    Status { 
+        #[allow(dead_code)]
+        status: SelectStruct 
+    },
     Formula(EmptyStruct),
     Relation(EmptyStruct),
     Rollup(EmptyStruct),

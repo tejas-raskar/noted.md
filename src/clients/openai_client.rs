@@ -1,4 +1,4 @@
-use crate::{ai_provider::AiProvider, error::NotedError, file_utils::FileData};
+use crate::{ai_provider::AiProvider, error::NotedError, file_utils::FileData, examples::ExampleContext};
 use async_trait::async_trait;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -87,34 +87,100 @@ impl OpenAIClient {
 #[async_trait]
 impl AiProvider for OpenAIClient {
     async fn send_request(&self, file_data: FileData) -> Result<String, NotedError> {
+        let empty_context = ExampleContext::new();
+        self.send_request_with_examples(file_data, &empty_context).await
+    }
+
+    async fn send_request_with_examples(&self, file_data: FileData, examples: &ExampleContext) -> Result<String, NotedError> {
         let url = format!("{}/v1/chat/completions", self.url);
-        let prompt = if let Some(custom_prompt) = &self.prompt {
-            custom_prompt.clone()
-        } else {
-            "The user has provided an image of handwritten notes. Your task is to accurately transcribe these notes into a well-structured Markdown file. Preserve the original hierarchy, including headings and lists. Use LaTeX for any mathematical equations that appear in the notes. The output should only be the markdown content.".to_string()
-        };
+        
+        let mut messages = Vec::new();
+
+        // Add examples as conversation history if available
+        if !examples.is_empty() {
+            let base_instruction = if let Some(custom_prompt) = &self.prompt {
+                custom_prompt.clone()
+            } else {
+                "The user has provided an image of handwritten notes. Your task is to accurately transcribe these notes into a well-structured Markdown file. Preserve the original hierarchy, including headings and lists. Use LaTeX for any mathematical equations that appear in the notes. The output should only be the markdown content.".to_string()
+            };
+
+            // Add each example as a user/assistant pair
+            for (i, example) in examples.examples.iter().enumerate() {
+                let example_image_url = format!(
+                    "data:{};base64,{}",
+                    example.image_data.mime_type, example.image_data.encoded_data
+                );
+
+                let instruction = if i == 0 {
+                    format!("{}\n\nHere's an example:", base_instruction)
+                } else {
+                    "Here's another example:".to_string()
+                };
+
+                // User message with example
+                messages.push(Message {
+                    role: "user".to_string(),
+                    content: vec![
+                        Content {
+                            content_type: "text".to_string(),
+                            text: Some(instruction),
+                            image_url: None,
+                        },
+                        Content {
+                            content_type: "image_url".to_string(),
+                            text: None,
+                            image_url: Some(Image { url: example_image_url }),
+                        },
+                    ],
+                });
+
+                // Assistant response
+                messages.push(Message {
+                    role: "assistant".to_string(),
+                    content: vec![Content {
+                        content_type: "text".to_string(),
+                        text: Some(example.markdown_content.clone()),
+                        image_url: None,
+                    }],
+                });
+            }
+        }
+
+        // Add the actual request
         let image_url = format!(
             "data:{};base64,{}",
             file_data.mime_type, file_data.encoded_data
         );
 
+        let final_prompt = if examples.is_empty() {
+            if let Some(custom_prompt) = &self.prompt {
+                custom_prompt.clone()
+            } else {
+                "The user has provided an image of handwritten notes. Your task is to accurately transcribe these notes into a well-structured Markdown file. Preserve the original hierarchy, including headings and lists. Use LaTeX for any mathematical equations that appear in the notes. The output should only be the markdown content.".to_string()
+            }
+        } else {
+            "Now please transcribe this image using the same style and accuracy as shown in the examples:".to_string()
+        };
+
+        messages.push(Message {
+            role: "user".to_string(),
+            content: vec![
+                Content {
+                    content_type: "text".to_string(),
+                    text: Some(final_prompt),
+                    image_url: None,
+                },
+                Content {
+                    content_type: "image_url".to_string(),
+                    text: None,
+                    image_url: Some(Image { url: image_url }),
+                },
+            ],
+        });
+
         let request_body = OpenAIRequest {
             model: self.model.clone(),
-            messages: vec![Message {
-                role: "user".to_string(),
-                content: vec![
-                    Content {
-                        content_type: "text".to_string(),
-                        text: Some(prompt),
-                        image_url: None,
-                    },
-                    Content {
-                        content_type: "image_url".to_string(),
-                        text: None,
-                        image_url: Some(Image { url: image_url }),
-                    },
-                ],
-            }],
+            messages,
         };
 
         let mut request = self.client.post(&url);

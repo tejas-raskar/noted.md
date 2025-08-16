@@ -3,6 +3,7 @@ mod cli;
 mod clients;
 mod config;
 mod error;
+mod examples;
 mod file_utils;
 mod notion;
 mod ui;
@@ -41,6 +42,7 @@ async fn process_and_save_file(
     progress_bar: &ProgressBar,
     notion_client: Option<&NotionClient>,
     notion_config: Option<&NotionConfig>,
+    examples: &crate::examples::ExampleContext,
 ) -> Result<(), NotedError> {
     let path = Path::new(file_path);
     let file_name = match path.file_name() {
@@ -62,9 +64,17 @@ async fn process_and_save_file(
         "File read successfully.".green()
     ));
 
-    progress_bar.set_message(format!("{}", "Sending to your AI model...".yellow()));
+    if examples.is_empty() {
+        progress_bar.set_message(format!("{}", "Sending to AI model (no examples)...".yellow()));
+    } else {
+        progress_bar.set_message(format!("{}", format!("Sending to AI model with {} examples...", examples.len()).yellow()));
+    }
 
-    let markdown = client.send_request(file_data).await?;
+    let markdown = if examples.is_empty() {
+        client.send_request(file_data).await?
+    } else {
+        client.send_request_with_examples(file_data, examples).await?
+    };
     progress_bar.println(format!("{} {}", "✔".green(), "Received response.".green()));
 
     let output_path = match output_dir {
@@ -556,7 +566,15 @@ async fn run() -> Result<(), NotedError> {
             api_key,
             prompt,
             notion,
+            use_examples,
+            examples_tags,
+            examples_count,
         } => {
+            // Log custom prompt usage if provided
+            if prompt.is_some() {
+                println!("📝 Using custom prompt");
+            }
+
             let config = Config::load()?;
             let client: Box<dyn AiProvider> = match config.active_provider.as_deref() {
                 Some("gemini") => {
@@ -620,6 +638,29 @@ async fn run() -> Result<(), NotedError> {
                 _ => return Err(NotedError::NoActiveProvider),
             };
 
+            // Display current AI provider and model information
+            match config.active_provider.as_deref() {
+                Some("claude") => {
+                    let model = config.claude.as_ref().map(|c| c.model.as_str()).unwrap_or("claude-3-opus-20240229");
+                    println!("🤖 Using AI Provider: Claude ({})", model);
+                },
+                Some("openai") => {
+                    let model = config.openai.as_ref().map(|c| c.model.as_str()).unwrap_or("gpt-4-vision-preview");
+                    println!("🤖 Using AI Provider: OpenAI ({})", model);
+                },
+                Some("gemini") => {
+                    println!("🤖 Using AI Provider: Gemini (gemini-pro-vision)");
+                },
+                Some("ollama") => {
+                    let model = config.ollama.as_ref().map(|c| c.model.as_str()).unwrap_or("llama3.2-vision");
+                    let url = config.ollama.as_ref().map(|c| c.url.as_str()).unwrap_or("http://localhost:11434");
+                    println!("🤖 Using AI Provider: Ollama ({}) at {}", model, url);
+                },
+                _ => {
+                    println!("🤖 Using AI Provider: Unknown");
+                }
+            }
+
             let input_path = Path::new(&path);
             if !input_path.exists() {
                 return Err(NotedError::IoError(std::io::Error::new(
@@ -637,6 +678,73 @@ async fn run() -> Result<(), NotedError> {
                 }
             } else {
                 (None, None)
+            };
+
+            // Check for examples compatibility with AI providers
+            if use_examples {
+                match config.active_provider.as_deref() {
+                    Some("gemini") => {
+                        eprintln!("⚠️ Warning: Gemini provider has limited examples support.");
+                        eprintln!("   Few-shot learning will fall back to regular conversion.");
+                        eprintln!("   For best results with examples, use Claude or OpenAI providers.");
+                    }
+                    Some("ollama") => {
+                        eprintln!("⚠️ Warning: Ollama provider has limited examples support.");
+                        eprintln!("   Few-shot learning will fall back to regular conversion.");
+                        eprintln!("   For best results with examples, use Claude or OpenAI providers.");
+                    }
+                    _ => {} // Claude and OpenAI have full support
+                }
+            }
+
+            // Load examples for few-shot learning
+            let example_context = if use_examples {
+                let examples_config = config.get_examples_config();
+                let manager = crate::examples::ExampleManager::new(
+                    examples_config.database_path,
+                    examples_config.examples_dir,
+                );
+                
+                let tags = if let Some(tags_str) = examples_tags {
+                    let tag_list: Vec<String> = tags_str
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    
+                    if tag_list.is_empty() {
+                        println!("🎯 Using all available examples (no tags specified)");
+                        vec![]
+                    } else {
+                        println!("🎯 Searching for examples with tags: {}", tag_list.join(", "));
+                        tag_list
+                    }
+                } else {
+                    println!("🎯 Using all available examples (no tags specified)");
+                    vec![]
+                };
+                
+                match manager.load_examples_with_tags(&tags, Some(examples_count)) {
+                    Ok(context) => {
+                        if !context.is_empty() {
+                            println!("✓ Loaded {} examples for few-shot learning (max: {})", context.len(), examples_count);
+                        } else {
+                            if tags.is_empty() {
+                                println!("⚠ No examples found");
+                            } else {
+                                println!("⚠ No examples found with tags: {}", tags.join(", "));
+                            }
+                            println!("  Use 'notedmd examples add' to create training examples");
+                        }
+                        context
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Failed to load examples: {}", e);
+                        crate::examples::ExampleContext::new()
+                    }
+                }
+            } else {
+                crate::examples::ExampleContext::new()
             };
 
             if input_path.is_dir() {
@@ -677,6 +785,7 @@ async fn run() -> Result<(), NotedError> {
                             &progress_bar,
                             notion_client.as_ref(),
                             notion_config,
+                            &example_context,
                         )
                         .await
                         {
@@ -686,8 +795,12 @@ async fn run() -> Result<(), NotedError> {
                     progress_bar.inc(1);
                 }
 
-                progress_bar
-                    .finish_with_message(format!("{}", "Completed processing all files".green()));
+                let summary_msg = if example_context.is_empty() {
+                    "Completed processing all files".green()
+                } else {
+                    format!("Completed processing all files (used {} examples)", example_context.len()).green()
+                };
+                progress_bar.finish_with_message(format!("{}", summary_msg));
             } else {
                 let path_str = input_path.to_str().ok_or_else(|| {
                     NotedError::FileNameError(input_path.to_string_lossy().to_string())
@@ -707,14 +820,66 @@ async fn run() -> Result<(), NotedError> {
                     &progress_bar,
                     notion_client.as_ref(),
                     notion_config,
+                    &example_context,
                 )
                 .await
                 {
                     progress_bar.println(format!("{}", e.to_string().red()));
                 }
                 progress_bar.inc(1);
-                progress_bar
-                    .finish_with_message(format!("{}", "Completed processing file".green()));
+                let summary_msg = if example_context.is_empty() {
+                    "Completed processing file".green()
+                } else {
+                    format!("Completed processing file (used {} examples)", example_context.len()).green()
+                };
+                progress_bar.finish_with_message(format!("{}", summary_msg));
+            }
+        }
+
+        Commands::Examples { action } => {
+            let config = Config::load()?;
+            let examples_config = config.get_examples_config();
+            let manager = crate::examples::ExampleManager::new(
+                examples_config.database_path,
+                examples_config.examples_dir,
+            );
+            manager.initialize()?;
+
+            match action {
+                cli::ExampleAction::Add { image, markdown, tag } => {
+                    // Read markdown content from file
+                    let md_content = std::fs::read_to_string(&markdown)?;
+                    let id = manager.add_example(&image, &md_content, tag)?;
+                    println!("✓ Added example with ID: {}", id);
+                }
+                cli::ExampleAction::List { tag } => {
+                    let examples = manager.list_examples(tag.as_deref())?;
+                    if examples.is_empty() {
+                        println!("No examples found.");
+                    } else {
+                        println!("Examples:");
+                        for example in examples {
+                            let tags_str = example.tags.join(", ");
+                            println!("  {} - {} (tags: {})", example.id, example.created_at, tags_str);
+                        }
+                    }
+                }
+                cli::ExampleAction::Remove { id } => {
+                    manager.remove_example(&id)?;
+                    println!("✓ Removed example: {}", id);
+                }
+                cli::ExampleAction::Show { id } => {
+                    if let Some(example) = manager.get_example(&id)? {
+                        println!("Example {}:", example.id);
+                        println!("  Created: {}", example.created_at);
+                        println!("  Tags: {}", example.tags.join(", "));
+                        println!("  Image: {}", example.image_path);
+                        println!("  Markdown content:");
+                        println!("    {}", example.markdown_content.replace('\n', "\n    "));
+                    } else {
+                        println!("Example not found: {}", id);
+                    }
+                }
             }
         }
     }

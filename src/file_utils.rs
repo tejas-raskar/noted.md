@@ -2,6 +2,7 @@ use crate::error::NotedError;
 use base64::{Engine, engine::general_purpose};
 use std::{fs, path::Path};
 
+#[derive(Debug, Clone)]
 pub struct FileData {
     pub encoded_data: String,
     pub mime_type: String,

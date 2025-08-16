@@ -27,3 +27,4 @@ thiserror = "2.0.12"
 comrak = "0.39.1"
 notion-client = "1.0.10"
 anyhow = "1.0.98"
+chrono = { version = "0.4", features = ["serde"] }
